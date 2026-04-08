@@ -1,17 +1,35 @@
 <script lang="ts">
   import { createEventDispatcher } from "svelte";
-  import type { JobApplication } from "$lib/types";
+  import { PIPELINE_STAGES, type JobApplication } from "$lib/types";
   import { formatDate, formatRelativeTime } from "$lib/utils";
   import StatusBadge from "$lib/components/StatusBadge.svelte";
 
   export let applications: JobApplication[] = [];
   export let busy = false;
 
+  type SortKey = "role" | "source" | "confidence" | "status" | "applied" | "touched" | "tags";
+  type SortDirection = "asc" | "desc";
+
+  const collator = new Intl.Collator(undefined, {
+    numeric: true,
+    sensitivity: "base",
+  });
+  const statusOrder = new Map<string, number>(
+    PIPELINE_STAGES.map((status, index) => [status, index])
+  );
+
   const dispatch = createEventDispatcher<{
     edit: JobApplication;
     remove: { id: number };
     statuschange: { id: number; status: string };
   }>();
+
+  let sortKey: SortKey = "touched";
+  let sortDirection: SortDirection = "desc";
+
+  $: sortedApplications = [...applications].sort((left, right) =>
+    compareApplications(left, right, sortKey, sortDirection)
+  );
 
   function handleStatusChange(id: number, event: Event) {
     const target = event.currentTarget as HTMLSelectElement;
@@ -41,6 +59,86 @@
 
     return "confidence-pill-low";
   }
+
+  function compareText(left: string, right: string) {
+    return collator.compare(left, right);
+  }
+
+  function compareApplications(
+    left: JobApplication,
+    right: JobApplication,
+    key: SortKey,
+    direction: SortDirection
+  ) {
+    let result = 0;
+
+    switch (key) {
+      case "role":
+        result =
+          compareText(left.title, right.title) || compareText(left.company, right.company);
+        break;
+      case "source":
+        result =
+          compareText(left.source, right.source) || compareText(left.title, right.title);
+        break;
+      case "confidence":
+        result =
+          (left.confidence ?? -1) - (right.confidence ?? -1) ||
+          compareText(left.title, right.title);
+        break;
+      case "status":
+        result =
+          (statusOrder.get(left.status) ?? 999) - (statusOrder.get(right.status) ?? 999) ||
+          compareText(left.title, right.title);
+        break;
+      case "applied":
+        result = left.appliedDate - right.appliedDate || compareText(left.title, right.title);
+        break;
+      case "touched":
+        result = left.lastUpdated - right.lastUpdated || compareText(left.title, right.title);
+        break;
+      case "tags":
+        result =
+          compareText(left.tags.join(" "), right.tags.join(" ")) ||
+          compareText(left.title, right.title);
+        break;
+    }
+
+    if (result === 0) {
+      result = left.id - right.id;
+    }
+
+    return direction === "asc" ? result : -result;
+  }
+
+  function toggleSort(nextKey: SortKey) {
+    if (sortKey === nextKey) {
+      sortDirection = sortDirection === "asc" ? "desc" : "asc";
+      return;
+    }
+
+    sortKey = nextKey;
+    sortDirection =
+      nextKey === "confidence" || nextKey === "applied" || nextKey === "touched"
+        ? "desc"
+        : "asc";
+  }
+
+  function getSortIcon(key: SortKey) {
+    if (sortKey !== key) {
+      return "↕";
+    }
+
+    return sortDirection === "asc" ? "↑" : "↓";
+  }
+
+  function getAriaSort(key: SortKey) {
+    if (sortKey !== key) {
+      return "none";
+    }
+
+    return sortDirection === "asc" ? "ascending" : "descending";
+  }
 </script>
 
 <section class="panel">
@@ -57,13 +155,62 @@
       <table class="applications-table">
         <thead>
           <tr>
-            <th>Role</th>
-            <th>Source</th>
-            <th>Confidence</th>
-            <th>Status</th>
-            <th>Applied</th>
-            <th>Touched</th>
-            <th>Tags</th>
+            <th aria-sort={getAriaSort("role")}>
+              <button type="button" class="sort-button" on:click={() => toggleSort("role")}>
+                <span>Role</span>
+                <span class:sort-icon-active={sortKey === "role"} class="sort-icon" aria-hidden="true">
+                  {getSortIcon("role")}
+                </span>
+              </button>
+            </th>
+            <th aria-sort={getAriaSort("source")}>
+              <button type="button" class="sort-button" on:click={() => toggleSort("source")}>
+                <span>Source</span>
+                <span class:sort-icon-active={sortKey === "source"} class="sort-icon" aria-hidden="true">
+                  {getSortIcon("source")}
+                </span>
+              </button>
+            </th>
+            <th aria-sort={getAriaSort("confidence")}>
+              <button type="button" class="sort-button" on:click={() => toggleSort("confidence")}>
+                <span>Confidence</span>
+                <span class:sort-icon-active={sortKey === "confidence"} class="sort-icon" aria-hidden="true">
+                  {getSortIcon("confidence")}
+                </span>
+              </button>
+            </th>
+            <th aria-sort={getAriaSort("status")}>
+              <button type="button" class="sort-button" on:click={() => toggleSort("status")}>
+                <span>Status</span>
+                <span class:sort-icon-active={sortKey === "status"} class="sort-icon" aria-hidden="true">
+                  {getSortIcon("status")}
+                </span>
+              </button>
+            </th>
+            <th aria-sort={getAriaSort("applied")}>
+              <button type="button" class="sort-button" on:click={() => toggleSort("applied")}>
+                <span>Applied</span>
+                <span class:sort-icon-active={sortKey === "applied"} class="sort-icon" aria-hidden="true">
+                  {getSortIcon("applied")}
+                </span>
+              </button>
+            </th>
+            <th aria-sort={getAriaSort("touched")}>
+              <button type="button" class="sort-button" on:click={() => toggleSort("touched")}>
+                <span>Touched</span>
+                <span class:sort-icon-active={sortKey === "touched"} class="sort-icon" aria-hidden="true">
+                  {getSortIcon("touched")}
+                </span>
+              </button>
+            </th>
+            <th aria-sort={getAriaSort("tags")}>
+              <button type="button" class="sort-button" on:click={() => toggleSort("tags")}>
+                <span>Tags</span>
+                <span class:sort-icon-active={sortKey === "tags"} class="sort-icon" aria-hidden="true">
+                  {getSortIcon("tags")}
+                </span>
+              </button>
+            </th>
             <th>Actions</th>
           </tr>
         </thead>
@@ -74,7 +221,7 @@
             </tr>
           {/if}
 
-          {#each applications as application (application.id)}
+          {#each sortedApplications as application (application.id)}
             <tr class="applications-row">
               <td>
                 <button
@@ -195,6 +342,35 @@
     color: var(--color-text-faint);
     border-top: 0;
     padding-top: 0;
+  }
+
+  .sort-button {
+    width: 100%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    text-align: left;
+    font: inherit;
+    color: inherit;
+    transition: color 0.2s ease;
+  }
+
+  .sort-button:hover {
+    color: var(--color-text);
+  }
+
+  .sort-icon {
+    color: var(--color-text-faint);
+    transition: color 0.2s ease, transform 0.2s ease;
+  }
+
+  .sort-icon-active {
+    color: var(--color-accent);
+    transform: translateY(-1px);
   }
 
   .table-link {

@@ -125,6 +125,18 @@ textarea::placeholder {
   grid-template-columns: minmax(280px, 0.95fr) minmax(0, 2.05fr);
 }
 
+.dashboard-grid-table {
+  grid-template-columns: 1fr;
+}
+
+.dashboard-grid-table > .content-stack:first-child {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.dashboard-grid-table > .content-stack:last-child {
+  grid-template-columns: 1fr;
+}
+
 .content-stack {
   display: grid;
   gap: 1.15rem;
@@ -623,6 +635,12 @@ textarea::placeholder {
 @media (max-width: 1100px) {
   .hero-grid,
   .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 960px) {
+  .dashboard-grid-table > .content-stack:first-child {
     grid-template-columns: 1fr;
   }
 }

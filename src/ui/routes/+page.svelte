@@ -558,7 +558,7 @@
       </div>
     </section>
 
-    <div class="dashboard-grid">
+    <div class:dashboard-grid-table={activeView === "table"} class="dashboard-grid">
       <div class="content-stack">
         <section class="panel">
           <p class="eyebrow">Smart Filter</p>
