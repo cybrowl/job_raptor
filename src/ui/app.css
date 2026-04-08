@@ -503,6 +503,18 @@ textarea::placeholder {
   gap: 0.85rem;
 }
 
+.file-upload-button {
+  position: relative;
+  overflow: hidden;
+}
+
+.visually-hidden-file {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
 .status-pill {
   display: inline-flex;
   align-items: center;

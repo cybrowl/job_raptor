@@ -13,10 +13,11 @@
     loadLocalSettings,
     saveLocalSettings,
   } from "$lib/local/persistence";
+  import { createEmptyResumeProfile, createResumeProfile } from "$lib/resume";
   import { getStorageDriverLabel, isTauriRuntime } from "$lib/runtime";
   import { parseJobPosting } from "$lib/parser";
   import { applicationsStore } from "$lib/stores/applications";
-  import type { JobApplication, JobApplicationInput } from "$lib/types";
+  import type { JobApplication, JobApplicationInput, ResumeProfile } from "$lib/types";
   import {
     buildRecentCountSeries,
     compareRecentPeriods,
@@ -46,10 +47,18 @@
   let xAiApiKeyDraft = "";
   let xAiModelDraft = "grok-4-fast-non-reasoning";
   let settingsStatus = "";
+  let resumeProfile: ResumeProfile = createEmptyResumeProfile();
+  let resumeTextDraft = "";
+  let resumeStatus = "";
   let backupBusy = false;
   let backupStatus = "";
+  let resyncingApplications = false;
   let parseToast: ParseToast | null = null;
   let parseToastTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const REVIEW_ROLE_TITLE = "Review Role Title";
+  const UNKNOWN_COMPANY = "Unknown Company";
+  const LOCATION_NOT_LISTED = "Location Not Listed";
 
   onMount(async () => {
     await Promise.all([applicationsStore.load(), loadParserSettings()]);
@@ -107,7 +116,7 @@
   );
   $: quickParseProvider = xAiApiKeyDraft.trim()
     ? isTauriRuntime()
-      ? `Grok Parser • ${xAiModelDraft}`
+      ? `Grok Parser • ${resumeProfile.rawText ? "Fit Scoring On" : xAiModelDraft}`
       : "Saved Grok Key"
     : "Heuristic Parser";
 
@@ -170,6 +179,77 @@
     showComposer = true;
   }
 
+  function mergeTags(primary: string[], secondary: string[]) {
+    const merged = new Set<string>();
+
+    for (const tag of [...primary, ...secondary]) {
+      const trimmed = tag.trim();
+      if (trimmed) {
+        merged.add(trimmed);
+      }
+    }
+
+    return [...merged];
+  }
+
+  function preferTitle(current: string, next: string | undefined) {
+    const trimmed = next?.trim() ?? "";
+    if (!trimmed || trimmed === REVIEW_ROLE_TITLE) {
+      return current;
+    }
+
+    return trimmed;
+  }
+
+  function preferCompany(current: string, next: string | undefined) {
+    const trimmed = next?.trim() ?? "";
+    if (!trimmed || trimmed === UNKNOWN_COMPANY) {
+      return current;
+    }
+
+    return trimmed;
+  }
+
+  function preferLocation(current: string, next: string | undefined) {
+    const trimmed = next?.trim() ?? "";
+    if (!trimmed || trimmed.toLowerCase() === LOCATION_NOT_LISTED.toLowerCase()) {
+      return current;
+    }
+
+    return trimmed;
+  }
+
+  function buildResyncedInput(
+    application: JobApplication,
+    payload: Awaited<ReturnType<typeof parseJobPosting>>
+  ): JobApplicationInput {
+    const nextFitSummary = payload.fitSummary?.trim() || application.fitSummary;
+    const nextParseConfidence =
+      payload.parseConfidence ?? payload.confidence ?? application.parseConfidence ?? null;
+    const nextConfidence = nextFitSummary
+      ? payload.confidence ?? application.confidence ?? nextParseConfidence
+      : application.fitSummary
+        ? application.confidence
+        : payload.confidence ?? application.confidence ?? nextParseConfidence;
+
+    return {
+      url: payload.url?.trim() || application.url,
+      company: preferCompany(application.company, payload.company),
+      title: preferTitle(application.title, payload.title),
+      location: preferLocation(application.location, payload.location),
+      salary: payload.salary?.trim() ? payload.salary.trim() : application.salary,
+      appliedDate: application.appliedDate,
+      status: application.status,
+      source: payload.source?.trim() || application.source,
+      notes: application.notes.trim() || payload.notes?.trim() || "",
+      tags: mergeTags(payload.tags ?? [], application.tags),
+      confidence: nextConfidence,
+      parseConfidence: nextParseConfidence,
+      fitSummary: nextFitSummary,
+      jobDescription: payload.jobDescription?.trim() || application.jobDescription,
+    };
+  }
+
   async function handleQuickParse() {
     if (!quickUrl.trim()) {
       quickParseError = "Paste A Job Url Before Running The Parser.";
@@ -186,7 +266,8 @@
       const payload = await parseJobPosting(
         submittedUrl,
         xAiApiKeyDraft,
-        xAiModelDraft
+        xAiModelDraft,
+        resumeProfile.rawText
       );
       const nextInput: JobApplicationInput = {
         url: payload.url?.trim() || submittedUrl,
@@ -200,6 +281,9 @@
         notes: payload.notes?.trim() || "Imported from URL parser.",
         tags: payload.tags ?? [],
         confidence: payload.confidence ?? null,
+        parseConfidence: payload.parseConfidence ?? null,
+        fitSummary: payload.fitSummary ?? "",
+        jobDescription: payload.jobDescription ?? "",
       };
 
       await applicationsStore.add(nextInput);
@@ -209,7 +293,11 @@
         "Added To Pipeline",
         `${nextInput.company} landed in ${nextInput.status} in ${formatSeconds(
           performance.now() - startedAt
-        )} via ${xAiApiKeyDraft.trim() ? "Grok" : "Heuristic Mode"}.`
+        )} via ${xAiApiKeyDraft.trim() ? "Grok" : "Heuristic Mode"}${
+          nextInput.fitSummary && nextInput.confidence !== null
+            ? ` • Fit ${Math.round(nextInput.confidence * 100)}%`
+            : ""
+        }.`
       );
     } catch (error) {
       quickParseError = error instanceof Error ? error.message : "Unknown Parsing Error.";
@@ -218,11 +306,74 @@
     }
   }
 
+  async function handleResyncAll() {
+    const applications = $applicationsStore.items;
+    const resumableApplications = applications.filter((application) => application.url.trim());
+
+    if (resumableApplications.length === 0) {
+      showParseToast("Nothing To Resync", "Saved jobs need a source URL before they can be refreshed.");
+      return;
+    }
+
+    const confirmationMessage =
+      xAiApiKeyDraft.trim() && resumeProfile.rawText.trim()
+        ? `Resync ${resumableApplications.length} saved job${resumableApplications.length === 1 ? "" : "s"} with current Grok fit scoring?`
+        : `Resync ${resumableApplications.length} saved job${resumableApplications.length === 1 ? "" : "s"} with the current parser settings? Save a Grok key and resume profile if you want fresh fit scores too.`;
+
+    if (!window.confirm(confirmationMessage)) {
+      return;
+    }
+
+    resyncingApplications = true;
+
+    try {
+      const updates: Array<{ id: number; input: JobApplicationInput }> = [];
+      let failed = 0;
+      let skipped = applications.length - resumableApplications.length;
+
+      for (const application of resumableApplications) {
+        try {
+          const payload = await parseJobPosting(
+            application.url,
+            xAiApiKeyDraft,
+            xAiModelDraft,
+            resumeProfile.rawText
+          );
+
+          updates.push({
+            id: application.id,
+            input: buildResyncedInput(application, payload),
+          });
+        } catch (error) {
+          failed += 1;
+        }
+      }
+
+      if (updates.length > 0) {
+        await applicationsStore.saveMany(updates);
+      }
+
+      showParseToast(
+        "Applications Resynced",
+        `${updates.length} refreshed${failed > 0 ? ` • ${failed} failed` : ""}${skipped > 0 ? ` • ${skipped} skipped` : ""}.`
+      );
+    } catch (error) {
+      showParseToast(
+        "Resync Failed",
+        error instanceof Error ? error.message : "Unable To Resync Saved Jobs."
+      );
+    } finally {
+      resyncingApplications = false;
+    }
+  }
+
   async function loadParserSettings() {
     try {
       const settings = await loadLocalSettings();
       xAiApiKeyDraft = settings.xAiApiKey;
       xAiModelDraft = settings.xAiModel;
+      resumeProfile = settings.resumeProfile;
+      resumeTextDraft = settings.resumeProfile.rawText;
     } catch (error) {
       settingsStatus =
         error instanceof Error ? error.message : "Unable To Load Local Parser Settings.";
@@ -236,6 +387,7 @@
       await saveLocalSettings({
         xAiApiKey: xAiApiKeyDraft,
         xAiModel: xAiModelDraft,
+        resumeProfile,
       });
       settingsStatus = xAiApiKeyDraft.trim()
         ? "Grok Key Saved On This Device."
@@ -243,6 +395,43 @@
     } catch (error) {
       settingsStatus =
         error instanceof Error ? error.message : "Unable To Save Local Parser Settings.";
+    }
+  }
+
+  async function handleResumeUpload(event: Event) {
+    const target = event.currentTarget as HTMLInputElement;
+    const file = target.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    try {
+      resumeTextDraft = (await file.text()).trim();
+      resumeStatus = `${file.name} Loaded. Save The Resume Profile To Use It For Fit Scoring.`;
+    } catch (error) {
+      resumeStatus = error instanceof Error ? error.message : "Unable To Read That Resume File.";
+    } finally {
+      target.value = "";
+    }
+  }
+
+  async function saveResumeProfile() {
+    try {
+      const nextResumeProfile = createResumeProfile(resumeTextDraft);
+      await saveLocalSettings({
+        xAiApiKey: xAiApiKeyDraft,
+        xAiModel: xAiModelDraft,
+        resumeProfile: nextResumeProfile,
+      });
+      resumeProfile = nextResumeProfile;
+      resumeTextDraft = nextResumeProfile.rawText;
+      resumeStatus = nextResumeProfile.rawText
+        ? `Resume Profile Saved With ${nextResumeProfile.skills.length} Tracked Skill${nextResumeProfile.skills.length === 1 ? "" : "s"}.`
+        : "Resume Profile Cleared.";
+    } catch (error) {
+      resumeStatus =
+        error instanceof Error ? error.message : "Unable To Save The Resume Profile.";
     }
   }
 
@@ -488,6 +677,65 @@
 
               <div class="settings-cluster">
                 <div class="panel-grid" style="gap: 0.35rem;">
+                  <p class="field-label">Resume Profile</p>
+                  <p class="micro">
+                    Upload or paste your resume text. It stays local and becomes the source of truth for fit scoring.
+                  </p>
+                </div>
+
+                <div class="meta-row">
+                  <span class="meta-pill">{resumeProfile.skills.length} Skills Tracked</span>
+                  <span class="meta-pill">
+                    {resumeProfile.updatedAt ? `Updated ${new Date(resumeProfile.updatedAt).toLocaleDateString("en-US")}` : "No Resume Saved"}
+                  </span>
+                </div>
+
+                <div class="field">
+                  <p class="field-label">Resume Text</p>
+                  <textarea
+                    bind:value={resumeTextDraft}
+                    rows="8"
+                    class="mono-textarea"
+                    placeholder="Paste the raw text of your resume here, or upload a plain text file."
+                  ></textarea>
+                </div>
+
+                <div class="action-row">
+                  <label class="ghost-button ghost-button-small file-upload-button">
+                    Upload Resume
+                    <input
+                      type="file"
+                      class="visually-hidden-file"
+                      accept=".txt,.md,text/plain,text/markdown"
+                      on:change={handleResumeUpload}
+                    />
+                  </label>
+                  <button type="button" class="ghost-button" on:click={saveResumeProfile}>
+                    Save Resume
+                  </button>
+                </div>
+
+                {#if resumeStatus}
+                  <p class="micro">{resumeStatus}</p>
+                {/if}
+
+                {#if resumeProfile.summary}
+                  <p class="micro">{resumeProfile.summary}</p>
+                {/if}
+
+                {#if resumeProfile.skills.length > 0}
+                  <div class="meta-row">
+                    {#each resumeProfile.skills.slice(0, 10) as skill}
+                      <span class="meta-pill">{skill}</span>
+                    {/each}
+                  </div>
+                {/if}
+              </div>
+
+              <div class="settings-divider"></div>
+
+              <div class="settings-cluster">
+                <div class="panel-grid" style="gap: 0.35rem;">
                   <p class="field-label">Backup Tools</p>
                   <p class="micro">
                     Export a portable backup from dev, then import it into the installed app.
@@ -609,9 +857,10 @@
         {#if activeView === "table"}
           <ApplicationsTable
             applications={filteredApplications}
-            busy={$applicationsStore.syncing}
+            busy={$applicationsStore.syncing || resyncingApplications}
             on:edit={handleEdit}
             on:remove={handleRemove}
+            on:resyncall={handleResyncAll}
             on:statuschange={handleStatusChange}
           />
         {:else if activeView === "board"}
@@ -635,6 +884,7 @@
   application={editingApplication}
   apiKey={xAiApiKeyDraft}
   model={xAiModelDraft}
+  resumeText={resumeProfile.rawText}
   seedInput={composerSeed}
   on:save={handleSave}
 />

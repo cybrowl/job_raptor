@@ -1,18 +1,20 @@
 import Database from "@tauri-apps/plugin-sql";
 import { getStorageDriver, type StorageDriver } from "$lib/runtime";
-import type { JobApplication, JobApplicationInput } from "$lib/types";
+import type { JobApplication, JobApplicationInput, ResumeProfile } from "$lib/types";
 import { sortApplicationsByRecent } from "$lib/utils";
 
 const DB_URL = "sqlite:job-raptor.db";
 const BROWSER_STATE_KEY = "job-raptor.browser-state.v1";
 const XAI_KEY_SETTING = "xai_api_key";
 const XAI_MODEL_SETTING = "xai_model";
+const RESUME_PROFILE_SETTING = "resume_profile";
 const BACKUP_KIND = "job-raptor-backup";
 const LEGACY_BACKUP_KIND = "jobflow-backup";
 
 export interface LocalSettings {
   xAiApiKey: string;
   xAiModel: string;
+  resumeProfile: ResumeProfile;
 }
 
 export interface JobRaptorBackup {
@@ -43,11 +45,23 @@ interface ApplicationRow {
   notes: string;
   tags: string;
   confidence: number | null;
+  parse_confidence: number | null;
+  fit_summary: string;
+  job_description: string;
   created_at: number;
   last_updated: number;
 }
 
 let dbPromise: Promise<Database> | null = null;
+
+function createEmptyResumeProfile(): ResumeProfile {
+  return {
+    rawText: "",
+    skills: [],
+    summary: "",
+    updatedAt: null,
+  };
+}
 
 function createEmptyBrowserState(): BrowserState {
   return {
@@ -56,6 +70,7 @@ function createEmptyBrowserState(): BrowserState {
     settings: {
       xAiApiKey: "",
       xAiModel: "grok-4-fast-non-reasoning",
+      resumeProfile: createEmptyResumeProfile(),
     },
   };
 }
@@ -89,6 +104,7 @@ function readBrowserState() {
           typeof parsed.settings?.xAiModel === "string" && parsed.settings.xAiModel.trim()
             ? parsed.settings.xAiModel.trim()
             : "grok-4-fast-non-reasoning",
+        resumeProfile: normalizeResumeProfile(parsed.settings?.resumeProfile),
       },
     };
   } catch (error) {
@@ -113,6 +129,23 @@ function normalizeSettings(raw: unknown): LocalSettings {
       typeof candidate.xAiModel === "string" && candidate.xAiModel.trim()
         ? candidate.xAiModel.trim()
         : "grok-4-fast-non-reasoning",
+    resumeProfile: normalizeResumeProfile(candidate.resumeProfile),
+  };
+}
+
+function normalizeResumeProfile(raw: unknown): ResumeProfile {
+  const candidate = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+
+  return {
+    rawText: typeof candidate.rawText === "string" ? candidate.rawText.trim() : "",
+    skills: Array.isArray(candidate.skills)
+      ? candidate.skills.filter((skill): skill is string => typeof skill === "string" && skill.trim().length > 0)
+      : [],
+    summary: typeof candidate.summary === "string" ? candidate.summary.trim() : "",
+    updatedAt:
+      typeof candidate.updatedAt === "number" && Number.isFinite(candidate.updatedAt)
+        ? candidate.updatedAt
+        : null,
   };
 }
 
@@ -129,11 +162,16 @@ function normalizeApplication(raw: unknown): JobApplication {
   const source = candidate.source;
   const notes = candidate.notes;
   const confidence = candidate.confidence;
+  const parseConfidence = candidate.parseConfidence;
+  const fitSummary = candidate.fitSummary;
+  const jobDescription = candidate.jobDescription;
   const createdAt = candidate.createdAt;
   const lastUpdated = candidate.lastUpdated;
   const normalizedLocation = typeof location === "string" ? location : "Location Not Listed";
   const normalizedSalary = typeof salary === "string" ? salary : null;
   const normalizedConfidence = typeof confidence === "number" ? confidence : null;
+  const normalizedParseConfidence =
+    typeof parseConfidence === "number" ? parseConfidence : null;
 
   const tags = Array.isArray(candidate.tags)
     ? candidate.tags.filter((tag): tag is string => typeof tag === "string")
@@ -152,6 +190,9 @@ function normalizeApplication(raw: unknown): JobApplication {
     notes: typeof notes === "string" ? notes : "",
     tags,
     confidence: normalizedConfidence,
+    parseConfidence: normalizedParseConfidence,
+    fitSummary: typeof fitSummary === "string" ? fitSummary : "",
+    jobDescription: typeof jobDescription === "string" ? jobDescription : "",
     createdAt: typeof createdAt === "number" ? createdAt : Date.now(),
     lastUpdated: typeof lastUpdated === "number" ? lastUpdated : Date.now(),
   };
@@ -212,6 +253,9 @@ function fromRow(row: ApplicationRow): JobApplication {
     notes: row.notes,
     tags: parseTags(row.tags),
     confidence: row.confidence,
+    parseConfidence: row.parse_confidence,
+    fitSummary: row.fit_summary,
+    jobDescription: row.job_description,
     createdAt: row.created_at,
     lastUpdated: row.last_updated,
   };
@@ -247,6 +291,9 @@ export async function listApplications() {
         notes,
         tags,
         confidence,
+        parse_confidence,
+        fit_summary,
+        job_description,
         created_at,
         last_updated
       FROM applications
@@ -256,7 +303,7 @@ export async function listApplications() {
     return rows.map(fromRow);
   }
 
-  return sortApplicationsByRecent(readBrowserState().applications);
+  return sortApplicationsByRecent(readBrowserState().applications.map(normalizeApplication));
 }
 
 export async function saveApplication(id: number | null, input: JobApplicationInput) {
@@ -279,9 +326,12 @@ export async function saveApplication(id: number | null, input: JobApplicationIn
           notes,
           tags,
           confidence,
+          parse_confidence,
+          fit_summary,
+          job_description,
           created_at,
           last_updated
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           input.url,
           input.company,
@@ -294,6 +344,9 @@ export async function saveApplication(id: number | null, input: JobApplicationIn
           input.notes,
           JSON.stringify(input.tags),
           input.confidence,
+          input.parseConfidence,
+          input.fitSummary,
+          input.jobDescription,
           now,
           now,
         ]
@@ -315,6 +368,9 @@ export async function saveApplication(id: number | null, input: JobApplicationIn
         notes = ?,
         tags = ?,
         confidence = ?,
+        parse_confidence = ?,
+        fit_summary = ?,
+        job_description = ?,
         last_updated = ?
       WHERE id = ?`,
       [
@@ -329,6 +385,9 @@ export async function saveApplication(id: number | null, input: JobApplicationIn
         input.notes,
         JSON.stringify(input.tags),
         input.confidence,
+        input.parseConfidence,
+        input.fitSummary,
+        input.jobDescription,
         now,
         id,
       ]
@@ -408,14 +467,25 @@ export async function loadLocalSettings(): Promise<LocalSettings> {
   if (getStorageDriver() === "sqlite") {
     const db = await getDatabase();
     const rows = await db.select<Array<{ key: string; value: string }>>(
-      "SELECT key, value FROM settings WHERE key IN (?, ?)",
-      [XAI_KEY_SETTING, XAI_MODEL_SETTING]
+      "SELECT key, value FROM settings WHERE key IN (?, ?, ?)",
+      [XAI_KEY_SETTING, XAI_MODEL_SETTING, RESUME_PROFILE_SETTING]
     );
     const entries = new Map(rows.map((row) => [row.key, row.value]));
+    const storedResume = entries.get(RESUME_PROFILE_SETTING);
+    let resumeProfile = createEmptyResumeProfile();
+
+    if (storedResume) {
+      try {
+        resumeProfile = normalizeResumeProfile(JSON.parse(storedResume));
+      } catch (error) {
+        resumeProfile = createEmptyResumeProfile();
+      }
+    }
 
     return {
       xAiApiKey: entries.get(XAI_KEY_SETTING) ?? "",
       xAiModel: entries.get(XAI_MODEL_SETTING) ?? "grok-4-fast-non-reasoning",
+      resumeProfile,
     };
   }
 
@@ -425,6 +495,7 @@ export async function loadLocalSettings(): Promise<LocalSettings> {
 export async function saveLocalSettings(settings: LocalSettings) {
   const normalizedKey = settings.xAiApiKey.trim();
   const normalizedModel = settings.xAiModel.trim() || "grok-4-fast-non-reasoning";
+  const normalizedResumeProfile = normalizeResumeProfile(settings.resumeProfile);
 
   if (getStorageDriver() === "sqlite") {
     const db = await getDatabase();
@@ -435,6 +506,17 @@ export async function saveLocalSettings(settings: LocalSettings) {
       ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
       [XAI_MODEL_SETTING, normalizedModel]
     );
+
+    if (normalizedResumeProfile.rawText) {
+      await db.execute(
+        `INSERT INTO settings (key, value)
+        VALUES (?, ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+        [RESUME_PROFILE_SETTING, JSON.stringify(normalizedResumeProfile)]
+      );
+    } else {
+      await db.execute("DELETE FROM settings WHERE key = ?", [RESUME_PROFILE_SETTING]);
+    }
 
     if (!normalizedKey) {
       await db.execute("DELETE FROM settings WHERE key = ?", [XAI_KEY_SETTING]);
@@ -453,6 +535,7 @@ export async function saveLocalSettings(settings: LocalSettings) {
   const state = readBrowserState();
   state.settings.xAiApiKey = normalizedKey;
   state.settings.xAiModel = normalizedModel;
+  state.settings.resumeProfile = normalizedResumeProfile;
   writeBrowserState(state);
 }
 
@@ -493,9 +576,12 @@ async function replaceAllLocalData(backup: JobRaptorBackup) {
             notes,
             tags,
             confidence,
+            parse_confidence,
+            fit_summary,
+            job_description,
             created_at,
             last_updated
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             application.id,
             application.url,
@@ -509,6 +595,9 @@ async function replaceAllLocalData(backup: JobRaptorBackup) {
             application.notes,
             JSON.stringify(application.tags),
             application.confidence,
+            application.parseConfidence,
+            application.fitSummary,
+            application.jobDescription,
             application.createdAt,
             application.lastUpdated,
           ]
@@ -531,6 +620,15 @@ async function replaceAllLocalData(backup: JobRaptorBackup) {
         );
       }
 
+      if (backup.settings.resumeProfile.rawText.trim()) {
+        await db.execute(
+          `INSERT INTO settings (key, value)
+          VALUES (?, ?)
+          ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+          [RESUME_PROFILE_SETTING, JSON.stringify(normalizeResumeProfile(backup.settings.resumeProfile))]
+        );
+      }
+
       await db.execute("COMMIT");
     } catch (error) {
       await db.execute("ROLLBACK");
@@ -543,7 +641,7 @@ async function replaceAllLocalData(backup: JobRaptorBackup) {
   writeBrowserState({
     nextId: backup.applications.reduce((max, application) => Math.max(max, application.id), 0) + 1,
     applications: sortApplicationsByRecent(backup.applications),
-    settings: backup.settings,
+    settings: normalizeSettings(backup.settings),
   });
 }
 

@@ -20,6 +20,9 @@ struct ParsedJobDraft {
     notes: String,
     tags: Vec<String>,
     status: String,
+    parse_confidence: Option<f64>,
+    fit_summary: String,
+    job_description: String,
     confidence: f64,
 }
 
@@ -83,6 +86,10 @@ fn clean_text(value: &str) -> String {
         .replace_all(&decode_html_entities(value), " ")
         .trim()
         .to_string()
+}
+
+fn truncate_chars(value: &str, limit: usize) -> String {
+    value.chars().take(limit).collect::<String>()
 }
 
 fn title_has_role_signal(value: &str) -> bool {
@@ -263,6 +270,10 @@ fn extract_salary_from_job_posting(job_posting: &Value) -> Option<String> {
     }
 }
 
+fn extract_description_from_job_posting(job_posting: &Value) -> Option<String> {
+    value_as_string(job_posting.get("description")).map(|value| truncate_chars(&value, 16_000))
+}
+
 fn best_document_title_candidate(value: &str, company: &str) -> Option<String> {
     let cleaned = clean_text(value);
 
@@ -360,6 +371,7 @@ fn enrich_heuristic_from_html(html: &str, heuristic: &ParsedJobDraft) -> ParsedJ
     let mut page_company = None;
     let mut page_location = None;
     let mut page_salary = None;
+    let mut page_description = None;
 
     for block in extract_json_ld_blocks(html) {
         let Some(job_posting) = find_job_posting(&block) else {
@@ -370,6 +382,7 @@ fn enrich_heuristic_from_html(html: &str, heuristic: &ParsedJobDraft) -> ParsedJ
         page_company = value_as_string(job_posting.pointer("/hiringOrganization/name"));
         page_location = extract_location_from_job_posting(job_posting);
         page_salary = extract_salary_from_job_posting(job_posting);
+        page_description = extract_description_from_job_posting(job_posting);
         break;
     }
 
@@ -401,6 +414,18 @@ fn enrich_heuristic_from_html(html: &str, heuristic: &ParsedJobDraft) -> ParsedJ
         draft.salary = Some(salary);
     }
 
+    let fallback_description = extract_meta_content(html, "description")
+        .or_else(|| extract_meta_content(html, "og:description"))
+        .or_else(|| extract_meta_content(html, "twitter:description"))
+        .map(|value| truncate_chars(&value, 16_000))
+        .unwrap_or_else(|| truncate_chars(&extract_text_from_html(html), 16_000));
+
+    if let Some(description) = page_description.filter(|value| !value.is_empty()) {
+        draft.job_description = description;
+    } else {
+        draft.job_description = fallback_description;
+    }
+
     draft.tags = rebuild_tags(&draft.company, &draft.title, &draft.location, &draft.source);
 
     if draft.title != heuristic.title && !looks_like_placeholder_title(&draft.title) {
@@ -423,6 +448,8 @@ fn enrich_heuristic_from_html(html: &str, heuristic: &ParsedJobDraft) -> ParsedJ
     if draft.location.trim().is_empty() {
         draft.location = LOCATION_NOT_LISTED.to_string();
     }
+
+    draft.parse_confidence = Some(draft.confidence);
 
     draft
 }
@@ -481,6 +508,14 @@ fn normalize_confidence(raw: Option<&Value>, fallback: f64) -> f64 {
     value.clamp(0.0, 1.0)
 }
 
+fn normalize_optional_confidence(raw: Option<&Value>, fallback: Option<f64>) -> Option<f64> {
+    match raw {
+        Some(Value::Null) => None,
+        Some(value) => value.as_f64().map(|score| score.clamp(0.0, 1.0)).or(fallback),
+        None => fallback,
+    }
+}
+
 fn normalize_draft(raw: &Value, fallback: &ParsedJobDraft) -> ParsedJobDraft {
     ParsedJobDraft {
         url: normalize_string(raw.get("url"), &fallback.url),
@@ -492,6 +527,12 @@ fn normalize_draft(raw: &Value, fallback: &ParsedJobDraft) -> ParsedJobDraft {
         notes: normalize_string(raw.get("notes"), &fallback.notes),
         tags: normalize_tags(raw.get("tags"), &fallback.tags),
         status: normalize_string(raw.get("status"), &fallback.status),
+        parse_confidence: normalize_optional_confidence(
+            raw.get("parseConfidence"),
+            fallback.parse_confidence,
+        ),
+        fit_summary: normalize_string(raw.get("fitSummary"), &fallback.fit_summary),
+        job_description: normalize_string(raw.get("jobDescription"), &fallback.job_description),
         confidence: normalize_confidence(raw.get("confidence"), fallback.confidence),
     }
 }
@@ -580,6 +621,7 @@ async fn parse_with_xai(
     model: &str,
     heuristic: &ParsedJobDraft,
     page_excerpt: &str,
+    resume_excerpt: &str,
 ) -> Result<ParsedJobDraft, String> {
     let response = reqwest::Client::new()
         .post("https://api.x.ai/v1/responses")
@@ -591,7 +633,7 @@ async fn parse_with_xai(
             "input": [
                 {
                     "role": "system",
-                    "content": "You extract structured job posting data. Return JSON that exactly matches the schema. Prefer page evidence when present, otherwise preserve the heuristic draft. Confidence must be a number between 0 and 1."
+                    "content": "You extract structured job posting data and score candidate fit. Return JSON that exactly matches the schema. Prefer page evidence when present, otherwise preserve the heuristic draft. parseConfidence is the reliability of the parsed role data. If resume text is provided, confidence must be the candidate-to-role fit score between 0 and 1 and fitSummary should briefly explain the match. If no resume text is provided, keep confidence aligned with parseConfidence and leave fitSummary empty."
                 },
                 {
                     "role": "user",
@@ -599,13 +641,18 @@ async fn parse_with_xai(
                         {
                             "type": "input_text",
                             "text": format!(
-                                "Parse this job posting into structured JSON.\n\nURL: {}\n\nHeuristic draft: {}\n\n{}",
+                                "Parse this job posting into structured JSON.\n\nURL: {}\n\nHeuristic draft: {}\n\n{}\n\n{}",
                                 url,
                                 serde_json::to_string(heuristic).map_err(|error| error.to_string())?,
                                 if page_excerpt.trim().is_empty() {
                                     "Page excerpt unavailable.".to_string()
                                 } else {
                                     format!("Page excerpt: {}", page_excerpt)
+                                },
+                                if resume_excerpt.trim().is_empty() {
+                                    "Resume text unavailable. Keep confidence aligned with parseConfidence.".to_string()
+                                } else {
+                                    format!("Resume text: {}", resume_excerpt)
                                 }
                             )
                         }
@@ -630,6 +677,9 @@ async fn parse_with_xai(
                             "notes",
                             "tags",
                             "status",
+                            "parseConfidence",
+                            "fitSummary",
+                            "jobDescription",
                             "confidence"
                         ],
                         "properties": {
@@ -645,6 +695,13 @@ async fn parse_with_xai(
                                 "items": { "type": "string" }
                             },
                             "status": { "type": "string" },
+                            "parseConfidence": {
+                                "type": ["number", "null"],
+                                "minimum": 0,
+                                "maximum": 1
+                            },
+                            "fitSummary": { "type": "string" },
+                            "jobDescription": { "type": "string" },
                             "confidence": {
                                 "type": "number",
                                 "minimum": 0,
@@ -679,12 +736,16 @@ async fn parse_job_url(
     url: String,
     api_key: Option<String>,
     model: Option<String>,
+    resume_text: Option<String>,
     heuristic: ParsedJobDraft,
 ) -> Result<ParsedJobDraft, String> {
     url::Url::parse(&url).map_err(|_| "Enter a valid job URL.".to_string())?;
     let page_html = fetch_page_html(&url).await;
     let enriched = enrich_heuristic_from_html(&page_html, &heuristic);
     let page_excerpt = extract_text_from_html(&page_html).chars().take(12_000).collect::<String>();
+    let resume_excerpt = resume_text
+        .map(|value| truncate_chars(value.trim(), 12_000))
+        .unwrap_or_default();
 
     let effective_api_key = api_key
         .and_then(|value| {
@@ -731,7 +792,16 @@ async fn parse_job_url(
         })
         .unwrap_or_else(|| "grok-4-fast-non-reasoning".to_string());
 
-    match parse_with_xai(&url, &api_key, &effective_model, &enriched, &page_excerpt).await {
+    match parse_with_xai(
+        &url,
+        &api_key,
+        &effective_model,
+        &enriched,
+        &page_excerpt,
+        &resume_excerpt,
+    )
+    .await
+    {
         Ok(parsed) => Ok(parsed),
         Err(_) => Ok(enriched),
     }
@@ -831,6 +901,14 @@ pub fn run() {
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL
             );",
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 3,
+            description: "add_resume_and_job_detail_columns",
+            sql: "ALTER TABLE applications ADD COLUMN parse_confidence REAL;
+ALTER TABLE applications ADD COLUMN fit_summary TEXT NOT NULL DEFAULT '';
+ALTER TABLE applications ADD COLUMN job_description TEXT NOT NULL DEFAULT '';",
             kind: MigrationKind::Up,
         },
     ];

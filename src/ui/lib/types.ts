@@ -10,6 +10,13 @@ export const PIPELINE_STAGES = [
 
 export type PipelineStage = (typeof PIPELINE_STAGES)[number];
 
+export interface ResumeProfile {
+  rawText: string;
+  skills: string[];
+  summary: string;
+  updatedAt: number | null;
+}
+
 export interface JobApplicationInput {
   url: string;
   company: string;
@@ -22,6 +29,9 @@ export interface JobApplicationInput {
   notes: string;
   tags: string[];
   confidence: number | null;
+  parseConfidence: number | null;
+  fitSummary: string;
+  jobDescription: string;
 }
 
 export interface JobApplication extends JobApplicationInput {

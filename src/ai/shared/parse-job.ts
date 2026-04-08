@@ -8,7 +8,10 @@ export interface ParsedJobDraft {
   notes: string;
   tags: string[];
   status: string;
-  confidence: number;
+  confidence: number | null;
+  parseConfidence: number | null;
+  fitSummary: string;
+  jobDescription: string;
 }
 
 const REVIEW_TITLE = "Review Role Title";
@@ -429,5 +432,8 @@ export function parseJobUrl(input: string): ParsedJobDraft {
     tags,
     status: "Applied",
     confidence,
+    parseConfidence: confidence,
+    fitSummary: "",
+    jobDescription: "",
   };
 }

@@ -13,6 +13,7 @@
   export let seedInput: Partial<JobApplicationInput> | null = null;
   export let apiKey = "";
   export let model = "grok-4-fast-non-reasoning";
+  export let resumeText = "";
 
   const dispatch = createEventDispatcher<{
     save: { id: number | null; input: JobApplicationInput };
@@ -39,6 +40,9 @@
       notes: "",
       tags: [],
       confidence: null,
+      parseConfidence: null,
+      fitSummary: "",
+      jobDescription: "",
     };
   }
 
@@ -56,6 +60,9 @@
           notes: value.notes,
           tags: value.tags,
           confidence: value.confidence,
+          parseConfidence: value.parseConfidence,
+          fitSummary: value.fitSummary,
+          jobDescription: value.jobDescription,
         }
       : {
           ...createBlankInput(),
@@ -91,7 +98,7 @@
     parseError = "";
 
     try {
-      const payload = await parseJobPosting(form.url, apiKey, model);
+      const payload = await parseJobPosting(form.url, apiKey, model, resumeText);
       parsedConfidence = payload.confidence ?? parsedConfidence;
       form = {
         ...form,
@@ -105,6 +112,9 @@
         notes: form.notes || payload.notes || "",
         tags: payload.tags?.length ? payload.tags : form.tags,
         confidence: payload.confidence ?? form.confidence,
+        parseConfidence: payload.parseConfidence ?? form.parseConfidence,
+        fitSummary: payload.fitSummary ?? form.fitSummary,
+        jobDescription: payload.jobDescription ?? form.jobDescription,
       };
       tagsValue = form.tags.join(", ");
     } catch (error) {
@@ -126,6 +136,9 @@
       appliedDate: fromDateInputValue(appliedDateValue),
       tags: normalizeTagInput(tagsValue),
       confidence: parsedConfidence ?? form.confidence ?? null,
+      parseConfidence: form.parseConfidence ?? null,
+      fitSummary: form.fitSummary.trim(),
+      jobDescription: form.jobDescription.trim(),
     };
 
     if (!nextInput.company || !nextInput.title) {
@@ -190,8 +203,11 @@
         </div>
 
         <div class="meta-row">
-          {#if parsedConfidence !== null}
-            <span class="meta-pill">Ai Confidence {Math.round(parsedConfidence * 100)}%</span>
+          {#if (parsedConfidence ?? form.confidence) !== null}
+            <span class="meta-pill">Fit Score {Math.round((parsedConfidence ?? form.confidence ?? 0) * 100)}%</span>
+          {/if}
+          {#if form.parseConfidence !== null}
+            <span class="meta-pill">Parse Confidence {Math.round(form.parseConfidence * 100)}%</span>
           {/if}
           {#if parseError}
             <span class="meta-pill">{parseError}</span>
@@ -249,6 +265,26 @@
               class="mono-input"
               placeholder="Remote, Engineering, Referral"
             />
+          </div>
+
+          <div class="field form-span">
+            <p class="field-label">Fit Summary</p>
+            <textarea
+              bind:value={form.fitSummary}
+              rows="3"
+              class="mono-textarea"
+              placeholder="Saved match reasoning will appear here."
+            ></textarea>
+          </div>
+
+          <div class="field form-span">
+            <p class="field-label">Job Description</p>
+            <textarea
+              bind:value={form.jobDescription}
+              rows="7"
+              class="mono-textarea"
+              placeholder="Saved job description text will appear here after parsing."
+            ></textarea>
           </div>
 
           <div class="field form-span">

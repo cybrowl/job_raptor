@@ -82,6 +82,26 @@ async function save(id: number | null, input: JobApplicationInput) {
   }
 }
 
+async function saveMany(entries: Array<{ id: number; input: JobApplicationInput }>) {
+  if (entries.length === 0) {
+    return;
+  }
+
+  update((current) => ({ ...current, syncing: true, error: null }));
+
+  try {
+    for (const entry of entries) {
+      await saveApplication(entry.id, entry.input);
+    }
+
+    await load();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    update((current) => ({ ...current, syncing: false, error: message }));
+    throw error;
+  }
+}
+
 async function setStatus(id: number, status: string) {
   update((current) => ({ ...current, syncing: true, error: null }));
 
@@ -117,6 +137,7 @@ export const applicationsStore = {
   load,
   add,
   save,
+  saveMany,
   setStatus,
   remove,
   clearError,

@@ -21,6 +21,7 @@
   const dispatch = createEventDispatcher<{
     edit: JobApplication;
     remove: { id: number };
+    resyncall: void;
     statuschange: { id: number; status: string };
   }>();
 
@@ -148,7 +149,17 @@
         <p class="eyebrow">Applications</p>
         <h2 class="title">Pipeline Table</h2>
       </div>
-      <span class="meta-pill">{applications.length} Visible</span>
+      <div class="action-row">
+        <button
+          type="button"
+          class="ghost-button ghost-button-small"
+          disabled={busy || applications.length === 0}
+          on:click={() => dispatch("resyncall")}
+        >
+          {busy ? "Working" : "Resync Saved Jobs"}
+        </button>
+        <span class="meta-pill">{applications.length} Visible</span>
+      </div>
     </div>
 
     <div class="table-wrap">
@@ -247,7 +258,11 @@
                     {getConfidenceLabel(application.confidence)}
                   </span>
                   <span class="table-copy">
-                    {application.confidence === null ? "Saved Manually" : "AI Parse"}
+                    {application.fitSummary
+                      ? "Resume Match"
+                      : application.parseConfidence !== null
+                        ? "Parse Confidence"
+                        : "Saved Manually"}
                   </span>
                 </div>
               </td>
