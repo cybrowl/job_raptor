@@ -137,8 +137,6 @@
       id: application?.id ?? null,
       input: nextInput,
     });
-
-    open = false;
   }
 </script>
 

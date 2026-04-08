@@ -60,6 +60,7 @@ async function add(input: JobApplicationInput) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     update((current) => ({ ...current, syncing: false, error: message }));
+    throw error;
   }
 }
 
@@ -77,6 +78,7 @@ async function save(id: number | null, input: JobApplicationInput) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     update((current) => ({ ...current, syncing: false, error: message }));
+    throw error;
   }
 }
 
@@ -89,6 +91,7 @@ async function setStatus(id: number, status: string) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     update((current) => ({ ...current, syncing: false, error: message }));
+    throw error;
   }
 }
 
@@ -101,6 +104,7 @@ async function remove(id: number) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     update((current) => ({ ...current, syncing: false, error: message }));
+    throw error;
   }
 }
 

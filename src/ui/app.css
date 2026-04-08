@@ -107,7 +107,16 @@ textarea::placeholder {
 .hero-grid {
   display: grid;
   gap: 1.75rem;
-  grid-template-columns: minmax(0, 1.2fr) minmax(360px, 0.8fr);
+  grid-template-columns: minmax(0, 1.3fr) minmax(360px, 0.7fr);
+}
+
+.hero-primary,
+.hero-secondary {
+  align-content: start;
+}
+
+.parser-spotlight {
+  gap: 0.85rem;
 }
 
 .dashboard-grid {
@@ -268,6 +277,10 @@ textarea::placeholder {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.metric-grid-hero {
+  margin-top: 1.25rem;
+}
+
 .metric-card {
   --metric-accent: var(--color-accent);
   border: 1px solid var(--color-border);
@@ -345,10 +358,28 @@ textarea::placeholder {
   font-weight: 450;
 }
 
+.mono-input-prominent {
+  min-height: 62px;
+  padding: 1rem 1.15rem;
+  font-size: 17px;
+  border-color: var(--color-accent-border);
+  background: linear-gradient(180deg, rgba(0, 240, 255, 0.08), rgba(240, 240, 250, 0.035));
+}
+
 .quick-parse-bar {
   display: grid;
   gap: 0.75rem;
   grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.quick-parse-bar-prominent {
+  align-items: stretch;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.quick-parse-bar-prominent .ghost-button {
+  min-height: 62px;
+  padding-inline: 22px;
 }
 
 .parser-feedback {

@@ -38,7 +38,6 @@
   let showComposer = false;
   let editingApplication: JobApplication | null = null;
   let composerSeed: Partial<JobApplicationInput> | null = null;
-  let parsedDraft: Partial<JobApplicationInput> | null = null;
   let activeView: WorkspaceView = "table";
   let quickUrl = "";
   let quickParseLoading = false;
@@ -124,28 +123,42 @@
     showComposer = true;
   }
 
-  function handleSave(
+  async function handleSave(
     event: CustomEvent<{
       id: number | null;
       input: Omit<JobApplication, "id" | "createdAt" | "lastUpdated">;
     }>
   ) {
     const { id, input } = event.detail;
-    void applicationsStore.save(id, input);
-    showComposer = false;
-    editingApplication = null;
-    composerSeed = null;
-    parsedDraft = null;
-  }
-
-  function handleRemove(event: CustomEvent<{ id: number }>) {
-    if (window.confirm("Delete this application from the pipeline?")) {
-      void applicationsStore.remove(event.detail.id);
+    try {
+      await applicationsStore.save(id, input);
+      showComposer = false;
+      editingApplication = null;
+      composerSeed = null;
+      if (id === null) {
+        quickUrl = "";
+      }
+    } catch (error) {
+      return;
     }
   }
 
-  function handleStatusChange(event: CustomEvent<{ id: number; status: string }>) {
-    void applicationsStore.setStatus(event.detail.id, event.detail.status);
+  async function handleRemove(event: CustomEvent<{ id: number }>) {
+    if (window.confirm("Delete this application from the pipeline?")) {
+      try {
+        await applicationsStore.remove(event.detail.id);
+      } catch (error) {
+        return;
+      }
+    }
+  }
+
+  async function handleStatusChange(event: CustomEvent<{ id: number; status: string }>) {
+    try {
+      await applicationsStore.setStatus(event.detail.id, event.detail.status);
+    } catch (error) {
+      return;
+    }
   }
 
   function handleQuickAdd(event: CustomEvent<{ status: string }>) {
@@ -164,25 +177,39 @@
     }
 
     const startedAt = performance.now();
+    const submittedUrl = quickUrl.trim();
     quickParseLoading = true;
     quickParseError = "";
     quickParseSummary = "";
-    parsedDraft = null;
 
     try {
       const payload = await parseJobPosting(
-        quickUrl.trim(),
+        submittedUrl,
         xAiApiKeyDraft,
         xAiModelDraft
       );
-      parsedDraft = payload;
-      composerSeed = payload;
-      quickParseSummary = `${payload.company} • ${payload.title}`;
+      const nextInput: JobApplicationInput = {
+        url: payload.url?.trim() || submittedUrl,
+        company: payload.company?.trim() || "Unknown Company",
+        title: payload.title?.trim() || "Review Role Title",
+        location: payload.location?.trim() || "Location Not Listed",
+        salary: payload.salary?.trim() ? payload.salary.trim() : null,
+        appliedDate: Date.now(),
+        status: payload.status?.trim() || "Applied",
+        source: payload.source?.trim() || "url parse",
+        notes: payload.notes?.trim() || "Imported from URL parser.",
+        tags: payload.tags ?? [],
+        confidence: payload.confidence ?? null,
+      };
+
+      await applicationsStore.add(nextInput);
+      quickParseSummary = `${nextInput.company} • ${nextInput.title}`;
+      quickUrl = "";
       showParseToast(
-        "Draft Ready",
-        `${xAiApiKeyDraft.trim() ? "Grok" : "Heuristic Mode"} delivered a clean draft in ${formatSeconds(
+        "Added To Pipeline",
+        `${nextInput.company} landed in ${nextInput.status} in ${formatSeconds(
           performance.now() - startedAt
-        )}.`
+        )} via ${xAiApiKeyDraft.trim() ? "Grok" : "Heuristic Mode"}.`
       );
     } catch (error) {
       quickParseError = error instanceof Error ? error.message : "Unknown Parsing Error.";
@@ -255,7 +282,6 @@
         return;
       }
 
-      parsedDraft = null;
       quickParseSummary = "";
       quickParseError = "";
       await Promise.all([applicationsStore.load(), loadParserSettings()]);
@@ -265,21 +291,6 @@
     } finally {
       backupBusy = false;
     }
-  }
-
-  function openParsedDraft() {
-    if (!parsedDraft) {
-      return;
-    }
-
-    editingApplication = null;
-    composerSeed = parsedDraft;
-    showComposer = true;
-  }
-
-  function dismissParsedDraft() {
-    parsedDraft = null;
-    quickParseSummary = "";
   }
 
   function clearParseToastTimer() {
@@ -350,50 +361,29 @@
   <div class="dashboard">
     <section class="panel hero-panel">
       <div class="hero-grid">
-        <div class="panel-grid hero-summary">
+        <div class="panel-grid hero-primary">
           <p class="eyebrow">Job Raptor Desktop</p>
           <h1 class="hero-heading">
-            Track Everything.
-            <span class="hero-accent">Move Faster.</span>
+            Paste A Job.
+            <span class="hero-accent">Catch It Fast.</span>
           </h1>
           <p class="body">
-            Local SQLite keeps your search safe on this device, while Grok
-            helps turn raw job links into draft applications without breaking
-            your flow.
+            Drop in a careers link and Job Raptor will parse it, save it,
+            and move it straight into your pipeline in one click.
           </p>
 
-          <div class="meta-row">
-            <span class="meta-pill">{storageModeLabel}</span>
-            <span class:meta-pill-accent={xAiApiKeyDraft.trim().length > 0} class="meta-pill">
-              {quickParseProvider}
-            </span>
-            <span class="meta-pill">Offline First</span>
-          </div>
-
-          <div class="action-row hero-actions">
-            <button type="button" class="ghost-button" on:click={openCreate}>
-              Add Application
-            </button>
-            {#if parsedDraft}
-              <button type="button" class="ghost-button" on:click={openParsedDraft}>
-                Review Draft
-              </button>
-            {/if}
-          </div>
-
-          {#if $applicationsStore.error}
-            <p class="micro">{$applicationsStore.error}</p>
-          {/if}
-        </div>
-
-        <div class="panel-grid">
-          <form class="panel-grid" on:submit|preventDefault={handleQuickParse}>
+          <form class="panel-grid parser-spotlight" on:submit|preventDefault={handleQuickParse}>
             <div class="field">
-              <p class="field-label">Paste Job Url</p>
-              <div class="quick-parse-bar">
+              <div class="meta-row">
+                <p class="field-label">Primary Capture</p>
+                <span class:meta-pill-accent={xAiApiKeyDraft.trim().length > 0} class="meta-pill">
+                  {quickParseProvider}
+                </span>
+              </div>
+              <div class="quick-parse-bar quick-parse-bar-prominent">
                 <input
                   bind:value={quickUrl}
-                  class="mono-input"
+                  class="mono-input mono-input-prominent"
                   placeholder="Https://Company.Com/Careers/Role"
                 />
                 <button
@@ -401,18 +391,43 @@
                   class="ghost-button ghost-button-accent"
                   disabled={quickParseLoading}
                 >
-                  {quickParseLoading ? "Parsing Url" : "Parse Url"}
+                  {quickParseLoading ? "Adding Role" : "Add From Url"}
                 </button>
               </div>
             </div>
+            <p class="micro">
+              One click parses the posting and saves it directly. Use manual add only when you need full control.
+            </p>
           </form>
+
+          <div class="meta-row">
+            <span class="meta-pill">{storageModeLabel}</span>
+            <span class="meta-pill">Offline First</span>
+            <button type="button" class="ghost-button ghost-button-small" on:click={openCreate}>
+              Add Manually
+            </button>
+          </div>
+
+          {#if $applicationsStore.error}
+            <p class="micro">{$applicationsStore.error}</p>
+          {/if}
+        </div>
+
+        <div class="panel-grid hero-secondary">
+          <div class="panel-grid" style="gap: 0.35rem;">
+            <p class="eyebrow">Capture Loop</p>
+            <h2 class="title">Keep New Roles Moving Without Extra Review Steps.</h2>
+            <p class="body">
+              Every saved role lands in the pipeline immediately, and you can still tweak fields later from edit.
+            </p>
+          </div>
 
           {#if quickParseLoading}
             <div class="parser-feedback parser-feedback-live">
               <div class="feedback-inline">
                 <span class="pulse-dot" aria-hidden="true"></span>
                 <span class="micro">
-                  Parsing With {xAiApiKeyDraft.trim() ? "Grok" : "Heuristic Mode"}.
+                  Parsing And Saving With {xAiApiKeyDraft.trim() ? "Grok" : "Heuristic Mode"}.
                 </span>
               </div>
             </div>
@@ -420,22 +435,14 @@
             <div class="parser-feedback parser-feedback-danger">
               <p class="micro">{quickParseError}</p>
             </div>
-          {:else if parsedDraft}
+          {:else if quickParseSummary}
             <div class="parser-feedback parser-feedback-success">
               <div class="panel-grid" style="gap: 0.25rem;">
-                <p class="field-label">Draft Ready</p>
+                <p class="field-label">Latest Add</p>
                 <p class="table-title">{quickParseSummary}</p>
                 <p class="micro">
-                  Confidence {Math.round((parsedDraft.confidence ?? 0) * 100)}% • Source {parsedDraft.source ?? "url parse"}
+                  Added straight to the pipeline. Edit it anytime from the workspace below.
                 </p>
-              </div>
-              <div class="action-row">
-                <button type="button" class="ghost-button" on:click={openParsedDraft}>
-                  Review Draft
-                </button>
-                <button type="button" class="ghost-button" on:click={dismissParsedDraft}>
-                  Dismiss
-                </button>
               </div>
             </div>
           {/if}
@@ -511,43 +518,43 @@
               {/if}
             </div>
           </details>
-
-          <div class="metric-grid">
-            <MetricCard
-              eyebrow="Pipeline"
-              value={String(metrics.totalApplications)}
-              trend={totalTrend.label}
-              trendDirection={totalTrend.direction}
-              sparkline={recentCreatedSeries}
-              note="All Tracked Roles Across The Search."
-            />
-            <MetricCard
-              eyebrow="Active"
-              value={String(metrics.activePipeline)}
-              trend={activeTrend.label}
-              trendDirection={activeTrend.direction}
-              sparkline={recentActiveSeries}
-              note="Roles Still Moving Through The Funnel."
-            />
-            <MetricCard
-              eyebrow="This Week"
-              value={String(metrics.appliedThisWeek)}
-              trend={appliedTrend.label}
-              trendDirection={appliedTrend.direction}
-              sparkline={recentAppliedSeries}
-              note="Fresh Applications Over Seven Days."
-            />
-            <MetricCard
-              eyebrow="Response"
-              value={formatPercent(metrics.responseRate)}
-              tone={metrics.responseRate >= 30 ? "positive" : metrics.responseRate > 0 ? "warning" : "danger"}
-              trend={responseTrend.label}
-              trendDirection={responseTrend.direction}
-              sparkline={recentResponseSeries}
-              note={`${metrics.staleCount} Stalled Thread${metrics.staleCount === 1 ? "" : "s"} Flagged.`}
-            />
-          </div>
         </div>
+      </div>
+
+      <div class="metric-grid metric-grid-hero">
+        <MetricCard
+          eyebrow="Pipeline"
+          value={String(metrics.totalApplications)}
+          trend={totalTrend.label}
+          trendDirection={totalTrend.direction}
+          sparkline={recentCreatedSeries}
+          note="All Tracked Roles Across The Search."
+        />
+        <MetricCard
+          eyebrow="Active"
+          value={String(metrics.activePipeline)}
+          trend={activeTrend.label}
+          trendDirection={activeTrend.direction}
+          sparkline={recentActiveSeries}
+          note="Roles Still Moving Through The Funnel."
+        />
+        <MetricCard
+          eyebrow="This Week"
+          value={String(metrics.appliedThisWeek)}
+          trend={appliedTrend.label}
+          trendDirection={appliedTrend.direction}
+          sparkline={recentAppliedSeries}
+          note="Fresh Applications Over Seven Days."
+        />
+        <MetricCard
+          eyebrow="Response"
+          value={formatPercent(metrics.responseRate)}
+          tone={metrics.responseRate >= 30 ? "positive" : metrics.responseRate > 0 ? "warning" : "danger"}
+          trend={responseTrend.label}
+          trendDirection={responseTrend.direction}
+          sparkline={recentResponseSeries}
+          note={`${metrics.staleCount} Stalled Thread${metrics.staleCount === 1 ? "" : "s"} Flagged.`}
+        />
       </div>
     </section>
 
