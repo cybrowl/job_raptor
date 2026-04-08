@@ -4,7 +4,6 @@
   import AddJobModal from "$lib/components/AddJobModal.svelte";
   import AnalyticsPanel from "$lib/components/AnalyticsPanel.svelte";
   import ApplicationsTable from "$lib/components/ApplicationsTable.svelte";
-  import KanbanBoard from "$lib/components/KanbanBoard.svelte";
   import MetricCard from "$lib/components/MetricCard.svelte";
   import {
     exportBackupToFile,
@@ -24,7 +23,7 @@
     isActiveStatus,
   } from "$lib/utils";
 
-  type WorkspaceView = "table" | "board" | "analytics" | "settings";
+  type WorkspaceView = "table" | "analytics" | "settings";
   type TrendDirection = "up" | "down" | "flat";
 
   interface ParseToast {
@@ -164,15 +163,6 @@
     } catch (error) {
       return;
     }
-  }
-
-  function handleQuickAdd(event: CustomEvent<{ status: string }>) {
-    editingApplication = null;
-    composerSeed = {
-      status: event.detail.status,
-      url: quickUrl.trim() || "",
-    };
-    showComposer = true;
   }
 
   function mergeTags(primary: string[], secondary: string[]) {
@@ -690,14 +680,6 @@
               </button>
               <button
                 type="button"
-                class:segmented-button-active={activeView === "board"}
-                class="segmented-button"
-                on:click={() => (activeView = "board")}
-              >
-                Board
-              </button>
-              <button
-                type="button"
                 class:segmented-button-active={activeView === "analytics"}
                 class="segmented-button"
                 on:click={() => (activeView = "analytics")}
@@ -723,14 +705,6 @@
             on:edit={handleEdit}
             on:remove={handleRemove}
             on:resyncall={handleResyncAll}
-            on:statuschange={handleStatusChange}
-          />
-        {:else if activeView === "board"}
-          <KanbanBoard
-            applications={$applicationsStore.items}
-            busy={$applicationsStore.syncing}
-            on:edit={handleEdit}
-            on:quickadd={handleQuickAdd}
             on:statuschange={handleStatusChange}
           />
         {:else if activeView === "analytics"}
