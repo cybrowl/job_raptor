@@ -1,0 +1,660 @@
+<script lang="ts">
+  import { onDestroy, onMount } from "svelte";
+  import { fade, fly } from "svelte/transition";
+  import AddJobModal from "$lib/components/AddJobModal.svelte";
+  import AnalyticsPanel from "$lib/components/AnalyticsPanel.svelte";
+  import ApplicationsTable from "$lib/components/ApplicationsTable.svelte";
+  import FilterBar from "$lib/components/FilterBar.svelte";
+  import KanbanBoard from "$lib/components/KanbanBoard.svelte";
+  import MetricCard from "$lib/components/MetricCard.svelte";
+  import {
+    exportBackupToFile,
+    importBackupFromFile,
+    loadLocalSettings,
+    saveLocalSettings,
+  } from "$lib/local/persistence";
+  import { getStorageDriverLabel, isTauriRuntime } from "$lib/runtime";
+  import { parseJobPosting } from "$lib/parser";
+  import { applicationsStore } from "$lib/stores/applications";
+  import type { JobApplication, JobApplicationInput } from "$lib/types";
+  import {
+    buildRecentCountSeries,
+    compareRecentPeriods,
+    filterApplications,
+    formatPercent,
+    isActiveStatus,
+  } from "$lib/utils";
+
+  type WorkspaceView = "table" | "board" | "analytics";
+  type TrendDirection = "up" | "down" | "flat";
+
+  interface ParseToast {
+    id: number;
+    title: string;
+    body: string;
+  }
+
+  let query = "";
+  let showComposer = false;
+  let editingApplication: JobApplication | null = null;
+  let composerSeed: Partial<JobApplicationInput> | null = null;
+  let parsedDraft: Partial<JobApplicationInput> | null = null;
+  let activeView: WorkspaceView = "table";
+  let quickUrl = "";
+  let quickParseLoading = false;
+  let quickParseError = "";
+  let quickParseSummary = "";
+  let xAiApiKeyDraft = "";
+  let xAiModelDraft = "grok-4-fast-non-reasoning";
+  let settingsStatus = "";
+  let backupBusy = false;
+  let backupStatus = "";
+  let parseToast: ParseToast | null = null;
+  let parseToastTimer: ReturnType<typeof setTimeout> | null = null;
+
+  onMount(async () => {
+    await Promise.all([applicationsStore.load(), loadParserSettings()]);
+  });
+
+  onDestroy(() => {
+    clearParseToastTimer();
+  });
+
+  $: filteredApplications = filterApplications($applicationsStore.items, query);
+  $: metrics = $applicationsStore.analytics;
+  $: storageModeLabel = getStorageDriverLabel($applicationsStore.storage);
+  $: recentCreatedSeries = toCumulative(
+    buildRecentCountSeries($applicationsStore.items, (application) => application.createdAt)
+  );
+  $: recentActiveSeries = buildRecentCountSeries(
+    $applicationsStore.items,
+    (application) => application.lastUpdated,
+    (application) => isActiveStatus(application.status)
+  );
+  $: recentAppliedSeries = buildRecentCountSeries(
+    $applicationsStore.items,
+    (application) => application.appliedDate
+  );
+  $: recentResponseSeries = buildRecentCountSeries(
+    $applicationsStore.items,
+    (application) => application.lastUpdated,
+    (application) =>
+      application.status !== "Wishlist" && application.status !== "Applied"
+  );
+  $: totalTrend = buildTrend(
+    compareRecentPeriods($applicationsStore.items, (application) => application.createdAt),
+    "new roles this week"
+  );
+  $: activeTrend = buildTrend(
+    compareRecentPeriods(
+      $applicationsStore.items,
+      (application) => application.lastUpdated,
+      (application) => isActiveStatus(application.status)
+    ),
+    "active touches this week"
+  );
+  $: appliedTrend = buildTrend(
+    compareRecentPeriods($applicationsStore.items, (application) => application.appliedDate),
+    "applications this week"
+  );
+  $: responseTrend = buildTrend(
+    compareRecentPeriods(
+      $applicationsStore.items,
+      (application) => application.lastUpdated,
+      (application) =>
+        application.status !== "Wishlist" && application.status !== "Applied"
+    ),
+    "responses this week"
+  );
+  $: quickParseProvider = xAiApiKeyDraft.trim()
+    ? isTauriRuntime()
+      ? `Grok Parser • ${xAiModelDraft}`
+      : "Saved Grok Key"
+    : "Heuristic Parser";
+
+  function openCreate() {
+    editingApplication = null;
+    composerSeed = quickUrl.trim() ? { url: quickUrl.trim() } : null;
+    showComposer = true;
+  }
+
+  function handleEdit(event: CustomEvent<JobApplication>) {
+    editingApplication = event.detail;
+    composerSeed = null;
+    showComposer = true;
+  }
+
+  function handleSave(
+    event: CustomEvent<{
+      id: number | null;
+      input: Omit<JobApplication, "id" | "createdAt" | "lastUpdated">;
+    }>
+  ) {
+    const { id, input } = event.detail;
+    void applicationsStore.save(id, input);
+    showComposer = false;
+    editingApplication = null;
+    composerSeed = null;
+    parsedDraft = null;
+  }
+
+  function handleRemove(event: CustomEvent<{ id: number }>) {
+    if (window.confirm("Delete this application from the pipeline?")) {
+      void applicationsStore.remove(event.detail.id);
+    }
+  }
+
+  function handleStatusChange(event: CustomEvent<{ id: number; status: string }>) {
+    void applicationsStore.setStatus(event.detail.id, event.detail.status);
+  }
+
+  function handleQuickAdd(event: CustomEvent<{ status: string }>) {
+    editingApplication = null;
+    composerSeed = {
+      status: event.detail.status,
+      url: quickUrl.trim() || "",
+    };
+    showComposer = true;
+  }
+
+  async function handleQuickParse() {
+    if (!quickUrl.trim()) {
+      quickParseError = "Paste A Job Url Before Running The Parser.";
+      return;
+    }
+
+    const startedAt = performance.now();
+    quickParseLoading = true;
+    quickParseError = "";
+    quickParseSummary = "";
+    parsedDraft = null;
+
+    try {
+      const payload = await parseJobPosting(
+        quickUrl.trim(),
+        xAiApiKeyDraft,
+        xAiModelDraft
+      );
+      parsedDraft = payload;
+      composerSeed = payload;
+      quickParseSummary = `${payload.company} • ${payload.title}`;
+      showParseToast(
+        "Draft Ready",
+        `${xAiApiKeyDraft.trim() ? "Grok" : "Heuristic Mode"} delivered a clean draft in ${formatSeconds(
+          performance.now() - startedAt
+        )}.`
+      );
+    } catch (error) {
+      quickParseError = error instanceof Error ? error.message : "Unknown Parsing Error.";
+    } finally {
+      quickParseLoading = false;
+    }
+  }
+
+  async function loadParserSettings() {
+    try {
+      const settings = await loadLocalSettings();
+      xAiApiKeyDraft = settings.xAiApiKey;
+      xAiModelDraft = settings.xAiModel;
+    } catch (error) {
+      settingsStatus =
+        error instanceof Error ? error.message : "Unable To Load Local Parser Settings.";
+    }
+  }
+
+  async function saveParserSettings() {
+    try {
+      xAiApiKeyDraft = xAiApiKeyDraft.trim();
+      xAiModelDraft = xAiModelDraft.trim() || "grok-4-fast-non-reasoning";
+      await saveLocalSettings({
+        xAiApiKey: xAiApiKeyDraft,
+        xAiModel: xAiModelDraft,
+      });
+      settingsStatus = xAiApiKeyDraft.trim()
+        ? "Grok Key Saved On This Device."
+        : "Grok Key Cleared.";
+    } catch (error) {
+      settingsStatus =
+        error instanceof Error ? error.message : "Unable To Save Local Parser Settings.";
+    }
+  }
+
+  async function handleExportBackup() {
+    backupBusy = true;
+    backupStatus = "";
+
+    try {
+      const result = await exportBackupToFile();
+
+      if (result.cancelled) {
+        backupStatus = "Backup Export Cancelled.";
+        return;
+      }
+
+      backupStatus = `Backup Exported To ${result.path}.`;
+    } catch (error) {
+      backupStatus = error instanceof Error ? error.message : "Unable To Export Backup.";
+    } finally {
+      backupBusy = false;
+    }
+  }
+
+  async function handleImportBackup() {
+    if (!window.confirm("Importing a backup will replace the current local pipeline on this device. Continue?")) {
+      return;
+    }
+
+    backupBusy = true;
+    backupStatus = "";
+
+    try {
+      const result = await importBackupFromFile();
+
+      if (result.cancelled) {
+        backupStatus = "Backup Import Cancelled.";
+        return;
+      }
+
+      parsedDraft = null;
+      quickParseSummary = "";
+      quickParseError = "";
+      await Promise.all([applicationsStore.load(), loadParserSettings()]);
+      backupStatus = `Imported ${result.applications} Application${result.applications === 1 ? "" : "s"} From Backup.`;
+    } catch (error) {
+      backupStatus = error instanceof Error ? error.message : "Unable To Import Backup.";
+    } finally {
+      backupBusy = false;
+    }
+  }
+
+  function openParsedDraft() {
+    if (!parsedDraft) {
+      return;
+    }
+
+    editingApplication = null;
+    composerSeed = parsedDraft;
+    showComposer = true;
+  }
+
+  function dismissParsedDraft() {
+    parsedDraft = null;
+    quickParseSummary = "";
+  }
+
+  function clearParseToastTimer() {
+    if (parseToastTimer) {
+      clearTimeout(parseToastTimer);
+      parseToastTimer = null;
+    }
+  }
+
+  function showParseToast(title: string, body: string) {
+    clearParseToastTimer();
+    parseToast = { id: Date.now(), title, body };
+    parseToastTimer = setTimeout(() => {
+      parseToast = null;
+      parseToastTimer = null;
+    }, 3400);
+  }
+
+  function formatSeconds(durationMs: number) {
+    return `${(durationMs / 1000).toFixed(1)} S`;
+  }
+
+  function toCumulative(values: number[]) {
+    let total = 0;
+    return values.map((value) => {
+      total += value;
+      return total;
+    });
+  }
+
+  function buildTrend(
+    values: { current: number; previous: number },
+    freshLabel: string
+  ): { direction: TrendDirection; label: string } {
+    if (values.current === 0 && values.previous === 0) {
+      return { direction: "flat", label: "Quiet Vs Last Week" };
+    }
+
+    if (values.previous === 0) {
+      return {
+        direction: values.current > 0 ? "up" : "flat",
+        label: `${values.current} ${freshLabel}`,
+      };
+    }
+
+    const delta = Math.round(((values.current - values.previous) / values.previous) * 100);
+
+    if (delta === 0) {
+      return { direction: "flat", label: "Steady Vs Last Week" };
+    }
+
+    return {
+      direction: delta > 0 ? "up" : "down",
+      label: `${delta > 0 ? "+" : ""}${delta}% Vs Last Week`,
+    };
+  }
+</script>
+
+<svelte:head>
+  <title>JobFlow</title>
+  <meta
+    name="description"
+    content="Track job applications with a local-first desktop dashboard, SQLite storage, and AI-assisted URL parsing."
+  />
+</svelte:head>
+
+<div class="app-shell">
+  <div class="dashboard">
+    <section class="panel hero-panel">
+      <div class="hero-grid">
+        <div class="panel-grid hero-summary">
+          <p class="eyebrow">JobFlow Desktop</p>
+          <h1 class="hero-heading">
+            Track Everything.
+            <span class="hero-accent">Move Faster.</span>
+          </h1>
+          <p class="body">
+            Local SQLite keeps your search safe on this device, while Grok
+            helps turn raw job links into draft applications without breaking
+            your flow.
+          </p>
+
+          <div class="meta-row">
+            <span class="meta-pill">{storageModeLabel}</span>
+            <span class:meta-pill-accent={xAiApiKeyDraft.trim().length > 0} class="meta-pill">
+              {quickParseProvider}
+            </span>
+            <span class="meta-pill">Offline First</span>
+          </div>
+
+          <div class="action-row hero-actions">
+            <button type="button" class="ghost-button" on:click={openCreate}>
+              Add Application
+            </button>
+            {#if parsedDraft}
+              <button type="button" class="ghost-button" on:click={openParsedDraft}>
+                Review Draft
+              </button>
+            {/if}
+          </div>
+
+          {#if $applicationsStore.error}
+            <p class="micro">{$applicationsStore.error}</p>
+          {/if}
+        </div>
+
+        <div class="panel-grid">
+          <form class="panel-grid" on:submit|preventDefault={handleQuickParse}>
+            <div class="field">
+              <p class="field-label">Paste Job Url</p>
+              <div class="quick-parse-bar">
+                <input
+                  bind:value={quickUrl}
+                  class="mono-input"
+                  placeholder="Https://Company.Com/Careers/Role"
+                />
+                <button
+                  type="submit"
+                  class="ghost-button ghost-button-accent"
+                  disabled={quickParseLoading}
+                >
+                  {quickParseLoading ? "Parsing Url" : "Parse Url"}
+                </button>
+              </div>
+            </div>
+          </form>
+
+          {#if quickParseLoading}
+            <div class="parser-feedback parser-feedback-live">
+              <div class="feedback-inline">
+                <span class="pulse-dot" aria-hidden="true"></span>
+                <span class="micro">
+                  Parsing With {xAiApiKeyDraft.trim() ? "Grok" : "Heuristic Mode"}.
+                </span>
+              </div>
+            </div>
+          {:else if quickParseError}
+            <div class="parser-feedback parser-feedback-danger">
+              <p class="micro">{quickParseError}</p>
+            </div>
+          {:else if parsedDraft}
+            <div class="parser-feedback parser-feedback-success">
+              <div class="panel-grid" style="gap: 0.25rem;">
+                <p class="field-label">Draft Ready</p>
+                <p class="table-title">{quickParseSummary}</p>
+                <p class="micro">
+                  Confidence {Math.round((parsedDraft.confidence ?? 0) * 100)}% • Source {parsedDraft.source ?? "url parse"}
+                </p>
+              </div>
+              <div class="action-row">
+                <button type="button" class="ghost-button" on:click={openParsedDraft}>
+                  Review Draft
+                </button>
+                <button type="button" class="ghost-button" on:click={dismissParsedDraft}>
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          {/if}
+
+          <details class="settings-disclosure">
+            <summary>Parser Settings</summary>
+            <div class="panel-grid settings-stack">
+              <div class="field">
+                <p class="field-label">Grok Api Key</p>
+                <div class="quick-parse-bar">
+                  <input
+                    bind:value={xAiApiKeyDraft}
+                    class="mono-input"
+                    type="password"
+                    placeholder="Paste Your XAI Api Key"
+                    autocomplete="off"
+                  />
+                  <button type="button" class="ghost-button" on:click={saveParserSettings}>
+                    Save Grok
+                  </button>
+                </div>
+              </div>
+
+              <div class="field">
+                <p class="field-label">Grok Model</p>
+                <input
+                  bind:value={xAiModelDraft}
+                  class="mono-input"
+                  placeholder="grok-4-fast-non-reasoning"
+                />
+              </div>
+
+              {#if settingsStatus}
+                <p class="micro">{settingsStatus}</p>
+              {/if}
+
+              <p class="micro">
+                Save an xAI key for richer native parsing. Leave it blank to stay
+                in heuristic mode.
+              </p>
+
+              <div class="settings-divider"></div>
+
+              <div class="settings-cluster">
+                <div class="panel-grid" style="gap: 0.35rem;">
+                  <p class="field-label">Backup Tools</p>
+                  <p class="micro">
+                    Export a portable backup from dev, then import it into the installed app.
+                  </p>
+                </div>
+                <div class="action-row">
+                  <button
+                    type="button"
+                    class="ghost-button"
+                    disabled={backupBusy}
+                    on:click={handleExportBackup}
+                  >
+                    {backupBusy ? "Working" : "Export Backup"}
+                  </button>
+                  <button
+                    type="button"
+                    class="ghost-button"
+                    disabled={backupBusy}
+                    on:click={handleImportBackup}
+                  >
+                    Import Backup
+                  </button>
+                </div>
+              </div>
+
+              {#if backupStatus}
+                <p class="micro">{backupStatus}</p>
+              {/if}
+            </div>
+          </details>
+
+          <div class="metric-grid">
+            <MetricCard
+              eyebrow="Pipeline"
+              value={String(metrics.totalApplications)}
+              trend={totalTrend.label}
+              trendDirection={totalTrend.direction}
+              sparkline={recentCreatedSeries}
+              note="All Tracked Roles Across The Search."
+            />
+            <MetricCard
+              eyebrow="Active"
+              value={String(metrics.activePipeline)}
+              trend={activeTrend.label}
+              trendDirection={activeTrend.direction}
+              sparkline={recentActiveSeries}
+              note="Roles Still Moving Through The Funnel."
+            />
+            <MetricCard
+              eyebrow="This Week"
+              value={String(metrics.appliedThisWeek)}
+              trend={appliedTrend.label}
+              trendDirection={appliedTrend.direction}
+              sparkline={recentAppliedSeries}
+              note="Fresh Applications Over Seven Days."
+            />
+            <MetricCard
+              eyebrow="Response"
+              value={formatPercent(metrics.responseRate)}
+              tone={metrics.responseRate >= 30 ? "positive" : metrics.responseRate > 0 ? "warning" : "danger"}
+              trend={responseTrend.label}
+              trendDirection={responseTrend.direction}
+              sparkline={recentResponseSeries}
+              note={`${metrics.staleCount} Stalled Thread${metrics.staleCount === 1 ? "" : "s"} Flagged.`}
+            />
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="dashboard-grid">
+      <div class="content-stack">
+        <section class="panel">
+          <p class="eyebrow">Smart Filter</p>
+          <h2 class="title">Search The Pipeline Fast.</h2>
+          <FilterBar bind:value={query} />
+          <p class="micro">
+            Search feels best when you start with company, stage, or source and then narrow from there.
+          </p>
+        </section>
+
+        <section class="panel">
+          <p class="eyebrow">Pipeline Insight</p>
+          <h2 class="title">What Needs Attention Next.</h2>
+          <div class="panel-grid">
+            <p class="body">{metrics.insight}</p>
+            <div class="meta-row">
+              <span class="meta-pill">{filteredApplications.length} In Current View</span>
+              <span class="meta-pill">{metrics.staleCount} Need Follow-Up</span>
+            </div>
+            <p class="micro">Use filters on the left, then switch the workspace to table, board, or analytics.</p>
+          </div>
+        </section>
+      </div>
+
+      <div class="content-stack">
+        <section class="panel workspace-switcher-panel">
+          <div class="workspace-switcher-row">
+            <div class="panel-grid" style="gap: 0.25rem;">
+              <p class="eyebrow">Workspace</p>
+              <h2 class="title">Focus On One View At A Time.</h2>
+            </div>
+            <div class="segmented-control" role="tablist" aria-label="Workspace view">
+              <button
+                type="button"
+                class:segmented-button-active={activeView === "table"}
+                class="segmented-button"
+                on:click={() => (activeView = "table")}
+              >
+                Table
+              </button>
+              <button
+                type="button"
+                class:segmented-button-active={activeView === "board"}
+                class="segmented-button"
+                on:click={() => (activeView = "board")}
+              >
+                Board
+              </button>
+              <button
+                type="button"
+                class:segmented-button-active={activeView === "analytics"}
+                class="segmented-button"
+                on:click={() => (activeView = "analytics")}
+              >
+                Analytics
+              </button>
+            </div>
+          </div>
+        </section>
+
+        {#if activeView === "table"}
+          <ApplicationsTable
+            applications={filteredApplications}
+            busy={$applicationsStore.syncing}
+            on:edit={handleEdit}
+            on:remove={handleRemove}
+            on:statuschange={handleStatusChange}
+          />
+        {:else if activeView === "board"}
+          <KanbanBoard
+            applications={filteredApplications}
+            busy={$applicationsStore.syncing}
+            on:edit={handleEdit}
+            on:quickadd={handleQuickAdd}
+            on:statuschange={handleStatusChange}
+          />
+        {:else}
+          <AnalyticsPanel metrics={metrics} />
+        {/if}
+      </div>
+    </div>
+  </div>
+</div>
+
+<AddJobModal
+  bind:open={showComposer}
+  application={editingApplication}
+  apiKey={xAiApiKeyDraft}
+  model={xAiModelDraft}
+  seedInput={composerSeed}
+  on:save={handleSave}
+/>
+
+{#if parseToast}
+  <div class="toast-stack" aria-live="polite">
+    {#key parseToast.id}
+      <aside class="success-toast" in:fly={{ y: 18, duration: 220 }} out:fade={{ duration: 160 }}>
+        <div class="success-toast-mark" aria-hidden="true"></div>
+        <div class="panel-grid" style="gap: 0.2rem;">
+          <p class="field-label">{parseToast.title}</p>
+          <p class="table-title">{parseToast.body}</p>
+        </div>
+      </aside>
+    {/key}
+  </div>
+{/if}

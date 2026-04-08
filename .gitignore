@@ -1,0 +1,32 @@
+# dependencies
+/node_modules
+
+# environment and configuration
+.env
+.env.*
+!.env.example
+
+# dfx
+.dfx
+
+# svelte
+.svelte-kit
+
+# package management locks
+package-lock.json
+
+# production builds
+/build
+
+# tauri
+/tauri/target
+
+# miscellaneous artifacts
+.DS_Store
+*.pem
+
+# debug logs
+npm-debug.log*
+
+target/
+.mops

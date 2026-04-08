@@ -1,0 +1,645 @@
+import Database from "@tauri-apps/plugin-sql";
+import { getStorageDriver, type StorageDriver } from "$lib/runtime";
+import type { JobApplication, JobApplicationInput } from "$lib/types";
+import { sortApplicationsByRecent } from "$lib/utils";
+
+const DB_URL = "sqlite:jobflow.db";
+const BROWSER_STATE_KEY = "jobflow.browser-state.v1";
+const XAI_KEY_SETTING = "xai_api_key";
+const XAI_MODEL_SETTING = "xai_model";
+
+export interface LocalSettings {
+  xAiApiKey: string;
+  xAiModel: string;
+}
+
+export interface JobFlowBackup {
+  kind: "jobflow-backup";
+  version: 1;
+  exportedAt: string;
+  storage: StorageDriver;
+  applications: JobApplication[];
+  settings: LocalSettings;
+}
+
+interface BrowserState {
+  nextId: number;
+  applications: JobApplication[];
+  settings: LocalSettings;
+}
+
+interface ApplicationRow {
+  id: number;
+  url: string;
+  company: string;
+  title: string;
+  location: string;
+  salary: string | null;
+  applied_date: number;
+  status: string;
+  source: string;
+  notes: string;
+  tags: string;
+  confidence: number | null;
+  created_at: number;
+  last_updated: number;
+}
+
+let dbPromise: Promise<Database> | null = null;
+
+function createEmptyBrowserState(): BrowserState {
+  return {
+    nextId: 1,
+    applications: [],
+    settings: {
+      xAiApiKey: "",
+      xAiModel: "grok-4-fast-non-reasoning",
+    },
+  };
+}
+
+function readBrowserState() {
+  if (typeof window === "undefined") {
+    return createEmptyBrowserState();
+  }
+
+  const raw = window.localStorage.getItem(BROWSER_STATE_KEY);
+
+  if (!raw) {
+    return createEmptyBrowserState();
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as Partial<BrowserState>;
+    const applications = Array.isArray(parsed.applications) ? parsed.applications : [];
+    const nextId =
+      typeof parsed.nextId === "number" && Number.isFinite(parsed.nextId)
+        ? parsed.nextId
+        : applications.reduce((max, application) => Math.max(max, application.id), 0) + 1;
+
+    return {
+      nextId,
+      applications,
+      settings: {
+        xAiApiKey:
+          typeof parsed.settings?.xAiApiKey === "string" ? parsed.settings.xAiApiKey : "",
+        xAiModel:
+          typeof parsed.settings?.xAiModel === "string" && parsed.settings.xAiModel.trim()
+            ? parsed.settings.xAiModel.trim()
+            : "grok-4-fast-non-reasoning",
+      },
+    };
+  } catch (error) {
+    return createEmptyBrowserState();
+  }
+}
+
+function writeBrowserState(state: BrowserState) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.setItem(BROWSER_STATE_KEY, JSON.stringify(state));
+}
+
+function normalizeSettings(raw: unknown): LocalSettings {
+  const candidate = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+
+  return {
+    xAiApiKey: typeof candidate.xAiApiKey === "string" ? candidate.xAiApiKey.trim() : "",
+    xAiModel:
+      typeof candidate.xAiModel === "string" && candidate.xAiModel.trim()
+        ? candidate.xAiModel.trim()
+        : "grok-4-fast-non-reasoning",
+  };
+}
+
+function normalizeApplication(raw: unknown): JobApplication {
+  const candidate = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  const id = candidate.id;
+  const url = candidate.url;
+  const company = candidate.company;
+  const title = candidate.title;
+  const location = candidate.location;
+  const salary = candidate.salary;
+  const appliedDate = candidate.appliedDate;
+  const status = candidate.status;
+  const source = candidate.source;
+  const notes = candidate.notes;
+  const confidence = candidate.confidence;
+  const createdAt = candidate.createdAt;
+  const lastUpdated = candidate.lastUpdated;
+  const normalizedLocation = typeof location === "string" ? location : "Location Not Listed";
+  const normalizedSalary = typeof salary === "string" ? salary : null;
+  const normalizedConfidence = typeof confidence === "number" ? confidence : null;
+
+  const tags = Array.isArray(candidate.tags)
+    ? candidate.tags.filter((tag): tag is string => typeof tag === "string")
+    : [];
+
+  return {
+    id: typeof id === "number" ? id : 0,
+    url: typeof url === "string" ? url : "",
+    company: typeof company === "string" ? company : "",
+    title: typeof title === "string" ? title : "",
+    location: normalizedLocation,
+    salary: normalizedSalary,
+    appliedDate: typeof appliedDate === "number" ? appliedDate : Date.now(),
+    status: typeof status === "string" ? status : "Applied",
+    source: typeof source === "string" ? source : "manual",
+    notes: typeof notes === "string" ? notes : "",
+    tags,
+    confidence: normalizedConfidence,
+    createdAt: typeof createdAt === "number" ? createdAt : Date.now(),
+    lastUpdated: typeof lastUpdated === "number" ? lastUpdated : Date.now(),
+  };
+}
+
+function parseBackup(raw: unknown): JobFlowBackup {
+  const candidate = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+
+  if (candidate.kind !== "jobflow-backup" || candidate.version !== 1) {
+    throw new Error("That backup file is not a supported JobFlow export.");
+  }
+
+  const applications = Array.isArray(candidate.applications)
+    ? candidate.applications.map(normalizeApplication)
+    : [];
+
+  return {
+    kind: "jobflow-backup",
+    version: 1,
+    exportedAt:
+      typeof candidate.exportedAt === "string" ? candidate.exportedAt : new Date().toISOString(),
+    storage:
+      candidate.storage === "sqlite" || candidate.storage === "browser"
+        ? candidate.storage
+        : getStorageDriver(),
+    applications: applications
+      .filter((application) => application.id > 0)
+      .sort((left, right) => right.lastUpdated - left.lastUpdated || right.id - left.id),
+    settings: normalizeSettings(candidate.settings),
+  };
+}
+
+function parseTags(value: string) {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed)
+      ? parsed.filter((tag): tag is string => typeof tag === "string")
+      : [];
+  } catch (error) {
+    return [];
+  }
+}
+
+function fromRow(row: ApplicationRow): JobApplication {
+  return {
+    id: row.id,
+    url: row.url,
+    company: row.company,
+    title: row.title,
+    location: row.location,
+    salary: row.salary,
+    appliedDate: row.applied_date,
+    status: row.status,
+    source: row.source,
+    notes: row.notes,
+    tags: parseTags(row.tags),
+    confidence: row.confidence,
+    createdAt: row.created_at,
+    lastUpdated: row.last_updated,
+  };
+}
+
+async function getDatabase() {
+  if (getStorageDriver() !== "sqlite") {
+    throw new Error("SQLite is only available inside the Tauri desktop shell.");
+  }
+
+  dbPromise ??= Database.load(DB_URL);
+  return dbPromise;
+}
+
+export function getPersistenceDriver(): StorageDriver {
+  return getStorageDriver();
+}
+
+export async function listApplications() {
+  if (getStorageDriver() === "sqlite") {
+    const db = await getDatabase();
+    const rows = await db.select<ApplicationRow[]>(
+      `SELECT
+        id,
+        url,
+        company,
+        title,
+        location,
+        salary,
+        applied_date,
+        status,
+        source,
+        notes,
+        tags,
+        confidence,
+        created_at,
+        last_updated
+      FROM applications
+      ORDER BY last_updated DESC, id DESC`
+    );
+
+    return rows.map(fromRow);
+  }
+
+  return sortApplicationsByRecent(readBrowserState().applications);
+}
+
+export async function saveApplication(id: number | null, input: JobApplicationInput) {
+  const now = Date.now();
+
+  if (getStorageDriver() === "sqlite") {
+    const db = await getDatabase();
+
+    if (id === null) {
+      await db.execute(
+        `INSERT INTO applications (
+          url,
+          company,
+          title,
+          location,
+          salary,
+          applied_date,
+          status,
+          source,
+          notes,
+          tags,
+          confidence,
+          created_at,
+          last_updated
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          input.url,
+          input.company,
+          input.title,
+          input.location,
+          input.salary,
+          input.appliedDate,
+          input.status,
+          input.source,
+          input.notes,
+          JSON.stringify(input.tags),
+          input.confidence,
+          now,
+          now,
+        ]
+      );
+      return;
+    }
+
+    await db.execute(
+      `UPDATE applications
+      SET
+        url = ?,
+        company = ?,
+        title = ?,
+        location = ?,
+        salary = ?,
+        applied_date = ?,
+        status = ?,
+        source = ?,
+        notes = ?,
+        tags = ?,
+        confidence = ?,
+        last_updated = ?
+      WHERE id = ?`,
+      [
+        input.url,
+        input.company,
+        input.title,
+        input.location,
+        input.salary,
+        input.appliedDate,
+        input.status,
+        input.source,
+        input.notes,
+        JSON.stringify(input.tags),
+        input.confidence,
+        now,
+        id,
+      ]
+    );
+    return;
+  }
+
+  const state = readBrowserState();
+
+  if (id === null) {
+    state.applications = [
+      {
+        id: state.nextId,
+        ...input,
+        createdAt: now,
+        lastUpdated: now,
+      },
+      ...state.applications,
+    ];
+    state.nextId += 1;
+    writeBrowserState(state);
+    return;
+  }
+
+  state.applications = state.applications.map((application) =>
+    application.id === id
+      ? {
+          ...application,
+          ...input,
+          lastUpdated: now,
+        }
+      : application
+  );
+  writeBrowserState(state);
+}
+
+export async function updateApplicationStatus(id: number, status: string) {
+  const now = Date.now();
+
+  if (getStorageDriver() === "sqlite") {
+    const db = await getDatabase();
+    await db.execute(
+      `UPDATE applications
+      SET status = ?, last_updated = ?
+      WHERE id = ?`,
+      [status, now, id]
+    );
+    return;
+  }
+
+  const state = readBrowserState();
+  state.applications = state.applications.map((application) =>
+    application.id === id
+      ? {
+          ...application,
+          status,
+          lastUpdated: now,
+        }
+      : application
+  );
+  writeBrowserState(state);
+}
+
+export async function deleteApplication(id: number) {
+  if (getStorageDriver() === "sqlite") {
+    const db = await getDatabase();
+    await db.execute("DELETE FROM applications WHERE id = ?", [id]);
+    return;
+  }
+
+  const state = readBrowserState();
+  state.applications = state.applications.filter((application) => application.id !== id);
+  writeBrowserState(state);
+}
+
+export async function loadLocalSettings(): Promise<LocalSettings> {
+  if (getStorageDriver() === "sqlite") {
+    const db = await getDatabase();
+    const rows = await db.select<Array<{ key: string; value: string }>>(
+      "SELECT key, value FROM settings WHERE key IN (?, ?)",
+      [XAI_KEY_SETTING, XAI_MODEL_SETTING]
+    );
+    const entries = new Map(rows.map((row) => [row.key, row.value]));
+
+    return {
+      xAiApiKey: entries.get(XAI_KEY_SETTING) ?? "",
+      xAiModel: entries.get(XAI_MODEL_SETTING) ?? "grok-4-fast-non-reasoning",
+    };
+  }
+
+  return readBrowserState().settings;
+}
+
+export async function saveLocalSettings(settings: LocalSettings) {
+  const normalizedKey = settings.xAiApiKey.trim();
+  const normalizedModel = settings.xAiModel.trim() || "grok-4-fast-non-reasoning";
+
+  if (getStorageDriver() === "sqlite") {
+    const db = await getDatabase();
+
+    await db.execute(
+      `INSERT INTO settings (key, value)
+      VALUES (?, ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+      [XAI_MODEL_SETTING, normalizedModel]
+    );
+
+    if (!normalizedKey) {
+      await db.execute("DELETE FROM settings WHERE key = ?", [XAI_KEY_SETTING]);
+      return;
+    }
+
+    await db.execute(
+      `INSERT INTO settings (key, value)
+      VALUES (?, ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+      [XAI_KEY_SETTING, normalizedKey]
+    );
+    return;
+  }
+
+  const state = readBrowserState();
+  state.settings.xAiApiKey = normalizedKey;
+  state.settings.xAiModel = normalizedModel;
+  writeBrowserState(state);
+}
+
+async function createBackupSnapshot(): Promise<JobFlowBackup> {
+  return {
+    kind: "jobflow-backup",
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    storage: getStorageDriver(),
+    applications: await listApplications(),
+    settings: await loadLocalSettings(),
+  };
+}
+
+async function replaceAllLocalData(backup: JobFlowBackup) {
+  if (getStorageDriver() === "sqlite") {
+    const db = await getDatabase();
+
+    await db.execute("BEGIN TRANSACTION");
+
+    try {
+      await db.execute("DELETE FROM applications");
+      await db.execute("DELETE FROM settings");
+      await db.execute("DELETE FROM sqlite_sequence WHERE name = 'applications'");
+
+      for (const application of backup.applications) {
+        await db.execute(
+          `INSERT INTO applications (
+            id,
+            url,
+            company,
+            title,
+            location,
+            salary,
+            applied_date,
+            status,
+            source,
+            notes,
+            tags,
+            confidence,
+            created_at,
+            last_updated
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            application.id,
+            application.url,
+            application.company,
+            application.title,
+            application.location,
+            application.salary,
+            application.appliedDate,
+            application.status,
+            application.source,
+            application.notes,
+            JSON.stringify(application.tags),
+            application.confidence,
+            application.createdAt,
+            application.lastUpdated,
+          ]
+        );
+      }
+
+      await db.execute(
+        `INSERT INTO settings (key, value)
+        VALUES (?, ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+        [XAI_MODEL_SETTING, backup.settings.xAiModel.trim() || "grok-4-fast-non-reasoning"]
+      );
+
+      if (backup.settings.xAiApiKey.trim()) {
+        await db.execute(
+          `INSERT INTO settings (key, value)
+          VALUES (?, ?)
+          ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+          [XAI_KEY_SETTING, backup.settings.xAiApiKey.trim()]
+        );
+      }
+
+      await db.execute("COMMIT");
+    } catch (error) {
+      await db.execute("ROLLBACK");
+      throw error;
+    }
+
+    return;
+  }
+
+  writeBrowserState({
+    nextId: backup.applications.reduce((max, application) => Math.max(max, application.id), 0) + 1,
+    applications: sortApplicationsByRecent(backup.applications),
+    settings: backup.settings,
+  });
+}
+
+function createBackupFilename() {
+  return `jobflow-backup-${new Date().toISOString().slice(0, 10)}.json`;
+}
+
+async function readBackupFromBrowserPicker() {
+  return await new Promise<string | null>((resolve) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json,application/json";
+
+    input.addEventListener(
+      "change",
+      async () => {
+        const file = input.files?.[0];
+        if (!file) {
+          resolve(null);
+          return;
+        }
+
+        resolve(await file.text());
+      },
+      { once: true }
+    );
+
+    input.addEventListener(
+      "cancel",
+      () => {
+        resolve(null);
+      },
+      { once: true }
+    );
+
+    input.click();
+  });
+}
+
+export async function exportBackupToFile() {
+  const snapshot = await createBackupSnapshot();
+  const text = JSON.stringify(snapshot, null, 2);
+  const filename = createBackupFilename();
+
+  if (getStorageDriver() === "sqlite") {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const path = await invoke<string | null>("export_backup_file", {
+      contents: text,
+      suggestedFilename: filename,
+    });
+
+    if (!path) {
+      return { cancelled: true as const };
+    }
+
+    return { cancelled: false as const, path };
+  }
+
+  const blob = new Blob([text], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+
+  return { cancelled: false as const, path: filename };
+}
+
+export async function importBackupFromFile() {
+  let text: string | null = null;
+
+  if (getStorageDriver() === "sqlite") {
+    const { invoke } = await import("@tauri-apps/api/core");
+    text = await invoke<string | null>("import_backup_file");
+
+    if (text === null) {
+      return { cancelled: true as const };
+    }
+  } else {
+    text = await readBackupFromBrowserPicker();
+
+    if (text === null) {
+      return { cancelled: true as const };
+    }
+  }
+
+  let parsed: unknown;
+
+  try {
+    parsed = JSON.parse(text);
+  } catch (error) {
+    throw new Error("That backup file is not valid JSON.");
+  }
+
+  const backup = parseBackup(parsed);
+
+  await replaceAllLocalData(backup);
+
+  return {
+    cancelled: false as const,
+    applications: backup.applications.length,
+  };
+}

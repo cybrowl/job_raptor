@@ -1,0 +1,42 @@
+{
+  "name": "jobflow",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "vite preview",
+    "prepare": "svelte-kit sync || echo ''",
+    "type-check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "check": "npm run type-check",
+    "lint": "eslint .",
+    "tauri": "tauri dev -c ./tauri/tauri.conf.json",
+    "tauri:dev": "tauri dev -c ./tauri/tauri.conf.json",
+    "tauri:build": "tauri build -c ./tauri/tauri.conf.json"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.32.0",
+    "@sveltejs/adapter-static": "^3.0.8",
+    "@sveltejs/kit": "^2.16.0",
+    "@sveltejs/vite-plugin-svelte": "^6.1.0",
+    "@tailwindcss/vite": "^4.1.11",
+    "@tauri-apps/cli": "^2.0.0",
+    "@types/node": "^25.5.0",
+    "eslint": "^9.32.0",
+    "eslint-plugin-svelte": "^3.11.0",
+    "globals": "^16.3.0",
+    "svelte": "^5.37.2",
+    "svelte-check": "^4.4.5",
+    "tailwindcss": "^4.1.11",
+    "typescript": "^5.9.3",
+    "vite": "^7.0.6"
+  },
+  "dependencies": {
+    "@fontsource-variable/geist": "^5.2.8",
+    "@tauri-apps/api": "^2.0.0",
+    "@tauri-apps/plugin-dialog": "^2.7.0",
+    "@tauri-apps/plugin-fs": "^2.5.0",
+    "@tauri-apps/plugin-sql": "^2.4.0"
+  }
+}

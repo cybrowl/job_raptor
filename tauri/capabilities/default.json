@@ -1,0 +1,6 @@
+{
+  "identifier": "default",
+  "description": "Default capability set for the JobFlow desktop shell",
+  "windows": ["main"],
+  "permissions": ["core:default", "sql:default", "sql:allow-execute"]
+}
