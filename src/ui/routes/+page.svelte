@@ -32,6 +32,11 @@
     body: string;
   }
 
+  interface UploadedResumeDraftFile {
+    name: string;
+    size: number;
+  }
+
   let showComposer = false;
   let editingApplication: JobApplication | null = null;
   let composerSeed: Partial<JobApplicationInput> | null = null;
@@ -46,6 +51,10 @@
   let resumeProfile: ResumeProfile = createEmptyResumeProfile();
   let resumeTextDraft = "";
   let resumeStatus = "";
+  let resumeDraftFile: UploadedResumeDraftFile | null = null;
+  let resumeDropActive = false;
+  let resumeDragDepth = 0;
+  let resumeFileInput: HTMLInputElement | null = null;
   let backupBusy = false;
   let backupStatus = "";
   let resyncingApplications = false;
@@ -390,13 +399,120 @@
     }
 
     try {
-      resumeTextDraft = (await file.text()).trim();
-      resumeStatus = `${file.name} Loaded. Save The Resume Profile To Use It For Fit Scoring.`;
+      await loadResumeFile(file);
     } catch (error) {
       resumeStatus = error instanceof Error ? error.message : "Unable To Read That Resume File.";
     } finally {
       target.value = "";
     }
+  }
+
+  function openResumeFilePicker() {
+    resumeFileInput?.click();
+  }
+
+  function supportsResumeFile(file: File) {
+    const normalizedName = file.name.trim().toLowerCase();
+    const normalizedType = file.type.trim().toLowerCase();
+
+    return (
+      normalizedName.endsWith(".txt") ||
+      normalizedName.endsWith(".md") ||
+      normalizedType === "text/plain" ||
+      normalizedType === "text/markdown" ||
+      normalizedType === ""
+    );
+  }
+
+  async function loadResumeFile(file: File) {
+    if (!supportsResumeFile(file)) {
+      resumeStatus = "Use A Plain Text Or Markdown Resume File.";
+      return;
+    }
+
+    const nextText = (await file.text()).trim();
+    resumeTextDraft = nextText;
+    resumeDraftFile = {
+      name: file.name,
+      size: file.size,
+    };
+    resumeStatus = `${file.name} Loaded. Review It, Then Save The Resume Profile.`;
+  }
+
+  function resetResumeDropState() {
+    resumeDragDepth = 0;
+    resumeDropActive = false;
+  }
+
+  function hasDraggedFiles(event: DragEvent) {
+    return event.dataTransfer ? Array.from(event.dataTransfer.types).includes("Files") : false;
+  }
+
+  function handleResumeDragEnter(event: DragEvent) {
+    if (!hasDraggedFiles(event)) {
+      return;
+    }
+
+    resumeDragDepth += 1;
+    resumeDropActive = true;
+  }
+
+  function handleResumeDragOver(event: DragEvent) {
+    if (!hasDraggedFiles(event)) {
+      return;
+    }
+
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = "copy";
+    }
+
+    resumeDropActive = true;
+  }
+
+  function handleResumeDragLeave(event: DragEvent) {
+    if (!hasDraggedFiles(event)) {
+      return;
+    }
+
+    resumeDragDepth = Math.max(0, resumeDragDepth - 1);
+    if (resumeDragDepth === 0) {
+      resumeDropActive = false;
+    }
+  }
+
+  async function handleResumeDrop(event: DragEvent) {
+    resetResumeDropState();
+    const file = event.dataTransfer?.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    try {
+      await loadResumeFile(file);
+    } catch (error) {
+      resumeStatus = error instanceof Error ? error.message : "Unable To Read That Resume File.";
+    }
+  }
+
+  function clearResumeDraftFile() {
+    resumeDraftFile = null;
+    resumeTextDraft = resumeProfile.rawText;
+    resumeStatus = resumeProfile.rawText
+      ? "Resume File Removed. Showing The Saved Resume Profile."
+      : "Resume File Removed.";
+  }
+
+  function formatFileSize(size: number) {
+    if (size < 1024) {
+      return `${size} B`;
+    }
+
+    if (size < 1024 * 1024) {
+      return `${(size / 1024).toFixed(1)} KB`;
+    }
+
+    return `${(size / (1024 * 1024)).toFixed(1)} MB`;
   }
 
   async function saveResumeProfile() {
@@ -749,7 +865,7 @@
                 <div class="panel-grid" style="gap: 0.35rem;">
                   <p class="field-label">Resume Profile</p>
                   <p class="micro">
-                    Upload or paste your resume text. It stays local and becomes the source of truth for fit scoring.
+                    Use the file uploader or paste your resume text. It stays local and becomes the source of truth for fit scoring.
                   </p>
                 </div>
 
@@ -761,25 +877,78 @@
                 </div>
 
                 <div class="field">
-                  <p class="field-label">Resume Text</p>
-                  <textarea
-                    bind:value={resumeTextDraft}
-                    rows="8"
-                    class="mono-textarea"
-                    placeholder="Paste the raw text of your resume here, or upload a plain text file."
-                  ></textarea>
-                </div>
-
-                <div class="action-row">
-                  <label class="ghost-button ghost-button-small file-upload-button">
-                    Upload Resume
+                  <p class="field-label">Resume File Uploader</p>
+                  <div
+                    class:resume-uploader-active={resumeDropActive}
+                    class="resume-uploader"
+                    role="button"
+                    tabindex="0"
+                    on:click={openResumeFilePicker}
+                    on:keydown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        openResumeFilePicker();
+                      }
+                    }}
+                    on:dragenter|preventDefault={handleResumeDragEnter}
+                    on:dragover|preventDefault={handleResumeDragOver}
+                    on:dragleave|preventDefault={handleResumeDragLeave}
+                    on:drop|preventDefault={handleResumeDrop}
+                  >
+                    <div class="resume-uploader-copy">
+                      <div class="panel-grid" style="gap: 0.25rem;">
+                        <p class="resume-uploader-title">Drop A Resume File Here</p>
+                        <p class="micro">
+                          Drag In A Txt Or Md Resume, Or Choose A File From Disk.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        class="ghost-button ghost-button-small"
+                        on:click|stopPropagation={openResumeFilePicker}
+                      >
+                        {resumeDraftFile ? "Replace File" : "Choose File"}
+                      </button>
+                    </div>
                     <input
+                      bind:this={resumeFileInput}
                       type="file"
                       class="visually-hidden-file"
                       accept=".txt,.md,text/plain,text/markdown"
                       on:change={handleResumeUpload}
                     />
-                  </label>
+                  </div>
+                </div>
+
+                {#if resumeDraftFile}
+                  <div class="uploaded-file-row">
+                    <div class="panel-grid" style="gap: 0.2rem;">
+                      <p class="uploaded-file-name">{resumeDraftFile.name}</p>
+                      <p class="micro">
+                        Ready To Import • {formatFileSize(resumeDraftFile.size)}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      class="ghost-button ghost-button-small"
+                      on:click={clearResumeDraftFile}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                {/if}
+
+                <div class="field">
+                  <p class="field-label">Resume Text</p>
+                  <textarea
+                    bind:value={resumeTextDraft}
+                    rows="8"
+                    class="mono-textarea"
+                    placeholder="Paste the raw text of your resume here if you would rather not upload a file."
+                  ></textarea>
+                </div>
+
+                <div class="action-row">
                   <button type="button" class="ghost-button" on:click={saveResumeProfile}>
                     Save Resume
                   </button>
