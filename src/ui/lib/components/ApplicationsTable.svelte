@@ -17,6 +17,30 @@
     const target = event.currentTarget as HTMLSelectElement;
     dispatch("statuschange", { id, status: target.value });
   }
+
+  function getConfidenceLabel(confidence: number | null) {
+    if (confidence === null) {
+      return "Manual";
+    }
+
+    return `${Math.round(confidence * 100)}%`;
+  }
+
+  function getConfidenceTone(confidence: number | null) {
+    if (confidence === null) {
+      return "confidence-pill-manual";
+    }
+
+    if (confidence >= 0.8) {
+      return "confidence-pill-high";
+    }
+
+    if (confidence >= 0.6) {
+      return "confidence-pill-medium";
+    }
+
+    return "confidence-pill-low";
+  }
 </script>
 
 <section class="panel">
@@ -35,6 +59,7 @@
           <tr>
             <th>Role</th>
             <th>Source</th>
+            <th>Confidence</th>
             <th>Status</th>
             <th>Applied</th>
             <th>Touched</th>
@@ -45,7 +70,7 @@
         <tbody>
           {#if applications.length === 0}
             <tr>
-              <td colspan="7" class="empty-row">No Applications Match The Current Filter.</td>
+              <td colspan="8" class="empty-row">No Applications Match The Current Filter.</td>
             </tr>
           {/if}
 
@@ -68,6 +93,16 @@
               </td>
               <td>
                 <span class="table-copy">{application.source}</span>
+              </td>
+              <td>
+                <div class="panel-grid" style="gap: 0.35rem;">
+                  <span class={`confidence-pill ${getConfidenceTone(application.confidence)}`}>
+                    {getConfidenceLabel(application.confidence)}
+                  </span>
+                  <span class="table-copy">
+                    {application.confidence === null ? "Saved Manually" : "AI Parse"}
+                  </span>
+                </div>
               </td>
               <td>
                 <div class="panel-grid" style="gap: 0.55rem;">
@@ -200,5 +235,44 @@
     letter-spacing: 1.17px;
     text-transform: uppercase;
     color: var(--color-text-faint);
+  }
+
+  .confidence-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 30px;
+    width: fit-content;
+    padding: 0 10px;
+    border-radius: 999px;
+    border: 1px solid var(--color-border);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.17px;
+    text-transform: uppercase;
+  }
+
+  .confidence-pill-high {
+    border-color: rgba(105, 215, 160, 0.3);
+    background: rgba(105, 215, 160, 0.1);
+    color: #69d7a0;
+  }
+
+  .confidence-pill-medium {
+    border-color: rgba(255, 207, 112, 0.3);
+    background: rgba(255, 207, 112, 0.1);
+    color: #ffcf70;
+  }
+
+  .confidence-pill-low {
+    border-color: rgba(255, 127, 143, 0.3);
+    background: rgba(255, 127, 143, 0.1);
+    color: #ff7f8f;
+  }
+
+  .confidence-pill-manual {
+    border-color: rgba(240, 240, 250, 0.16);
+    background: rgba(240, 240, 250, 0.04);
+    color: var(--color-text-soft);
   }
 </style>

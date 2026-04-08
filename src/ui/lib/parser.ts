@@ -6,7 +6,7 @@ export async function parseJobPosting(url: string, apiKey: string, model: string
   const trimmedApiKey = apiKey.trim();
   const trimmedModel = model.trim() || "grok-4-fast-non-reasoning";
 
-  if (!trimmedApiKey || !isTauriRuntime()) {
+  if (!isTauriRuntime()) {
     return heuristic;
   }
 
@@ -15,7 +15,7 @@ export async function parseJobPosting(url: string, apiKey: string, model: string
 
     return await invoke<ParsedJobDraft>("parse_job_url", {
       url: heuristic.url,
-      apiKey: trimmedApiKey,
+      apiKey: trimmedApiKey || null,
       model: trimmedModel,
       heuristic,
     });

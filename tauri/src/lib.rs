@@ -23,8 +23,408 @@ struct ParsedJobDraft {
     confidence: f64,
 }
 
+const REVIEW_TITLE: &str = "Review Role Title";
+const LOCATION_NOT_LISTED: &str = "Location not listed";
+const ROLE_HINTS: &[&str] = &[
+    "engineer",
+    "developer",
+    "designer",
+    "manager",
+    "director",
+    "analyst",
+    "scientist",
+    "architect",
+    "consultant",
+    "specialist",
+    "coordinator",
+    "lead",
+    "head",
+    "product",
+    "program",
+    "marketing",
+    "sales",
+    "account",
+    "operations",
+    "finance",
+    "legal",
+    "support",
+    "success",
+    "recruiter",
+    "talent",
+    "security",
+    "data",
+    "people",
+    "devops",
+    "platform",
+    "software",
+    "frontend",
+    "backend",
+    "fullstack",
+];
+
 fn resolve_dialog_path(file_path: tauri_plugin_dialog::FilePath) -> Result<std::path::PathBuf, String> {
     file_path.into_path().map_err(|error| error.to_string())
+}
+
+fn decode_html_entities(value: &str) -> String {
+    value
+        .replace("&amp;", "&")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+        .replace("&apos;", "'")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&nbsp;", " ")
+}
+
+fn clean_text(value: &str) -> String {
+    Regex::new(r"\s+")
+        .unwrap()
+        .replace_all(&decode_html_entities(value), " ")
+        .trim()
+        .to_string()
+}
+
+fn title_has_role_signal(value: &str) -> bool {
+    let normalized = value.to_lowercase();
+    ROLE_HINTS.iter().any(|hint| normalized.contains(hint))
+}
+
+fn looks_like_placeholder_title(value: &str) -> bool {
+    let trimmed = value.trim();
+
+    if trimmed.is_empty() || trimmed.eq_ignore_ascii_case(REVIEW_TITLE) {
+        return true;
+    }
+
+    if Regex::new(r"(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+        .unwrap()
+        .is_match(trimmed)
+    {
+        return true;
+    }
+
+    let normalized = trimmed
+        .to_lowercase()
+        .replace([' ', '-', '_'], "");
+
+    if normalized.len() < 10 || !normalized.chars().all(|character| character.is_ascii_alphanumeric()) {
+        return false;
+    }
+
+    let digit_count = normalized.chars().filter(|character| character.is_ascii_digit()).count();
+    let vowel_count = normalized
+        .chars()
+        .filter(|character| matches!(character, 'a' | 'e' | 'i' | 'o' | 'u'))
+        .count();
+
+    Regex::new(r"(?i)^[a-f0-9]{12,}$").unwrap().is_match(&normalized)
+        || (digit_count as f64 / normalized.len() as f64 >= 0.28
+            && vowel_count as f64 / normalized.len() as f64 <= 0.18)
+}
+
+fn extract_meta_content(html: &str, key: &str) -> Option<String> {
+    let escaped = regex::escape(key);
+    let patterns = [
+        format!(
+            r#"(?is)<meta[^>]+(?:property|name)\s*=\s*["']{}["'][^>]*content\s*=\s*["']([^"']+)["'][^>]*>"#,
+            escaped
+        ),
+        format!(
+            r#"(?is)<meta[^>]+content\s*=\s*["']([^"']+)["'][^>]+(?:property|name)\s*=\s*["']{}["'][^>]*>"#,
+            escaped
+        ),
+    ];
+
+    for pattern in patterns {
+        if let Ok(regex) = Regex::new(&pattern) {
+            if let Some(capture) = regex.captures(html) {
+                if let Some(value) = capture.get(1) {
+                    let cleaned = clean_text(value.as_str());
+                    if !cleaned.is_empty() {
+                        return Some(cleaned);
+                    }
+                }
+            }
+        }
+    }
+
+    None
+}
+
+fn extract_tag_text(html: &str, tag: &str) -> Option<String> {
+    let pattern = format!(r#"(?is)<{tag}[^>]*>(.*?)</{tag}>"#);
+    let regex = Regex::new(&pattern).ok()?;
+    let capture = regex.captures(html)?;
+    let value = capture.get(1)?.as_str();
+    let cleaned = clean_text(value);
+
+    if cleaned.is_empty() {
+        None
+    } else {
+        Some(cleaned)
+    }
+}
+
+fn extract_json_ld_blocks(html: &str) -> Vec<Value> {
+    let regex =
+        Regex::new(r#"(?is)<script[^>]+type\s*=\s*["']application/ld\+json["'][^>]*>(.*?)</script>"#)
+            .unwrap();
+
+    regex
+        .captures_iter(html)
+        .filter_map(|capture| capture.get(1))
+        .filter_map(|content| serde_json::from_str::<Value>(content.as_str().trim()).ok())
+        .collect()
+}
+
+fn value_matches_job_posting(value: &Value) -> bool {
+    match value {
+        Value::String(kind) => kind.eq_ignore_ascii_case("JobPosting"),
+        Value::Array(values) => values.iter().any(value_matches_job_posting),
+        _ => false,
+    }
+}
+
+fn find_job_posting(value: &Value) -> Option<&Value> {
+    match value {
+        Value::Object(map) => {
+            if map.get("@type").is_some_and(value_matches_job_posting) {
+                return Some(value);
+            }
+
+            map.values().find_map(find_job_posting)
+        }
+        Value::Array(values) => values.iter().find_map(find_job_posting),
+        _ => None,
+    }
+}
+
+fn value_as_string(value: Option<&Value>) -> Option<String> {
+    value.and_then(Value::as_str).map(clean_text).filter(|value| !value.is_empty())
+}
+
+fn extract_location_from_job_posting(job_posting: &Value) -> Option<String> {
+    if let Some(remote) = value_as_string(job_posting.pointer("/applicantLocationRequirements/name")) {
+        return Some(remote);
+    }
+
+    let locations = match job_posting.get("jobLocation") {
+        Some(Value::Array(values)) => values,
+        Some(Value::Object(_)) => std::slice::from_ref(job_posting.get("jobLocation")?),
+        _ => return None,
+    };
+
+    for location in locations {
+        let address = location.get("address").unwrap_or(location);
+        let parts = [
+            value_as_string(address.get("addressLocality")),
+            value_as_string(address.get("addressRegion")),
+            value_as_string(address.get("addressCountry")),
+        ]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>();
+
+        if !parts.is_empty() {
+            return Some(parts.join(", "));
+        }
+    }
+
+    None
+}
+
+fn extract_salary_from_job_posting(job_posting: &Value) -> Option<String> {
+    let base_salary = job_posting.get("baseSalary")?;
+    let currency = value_as_string(base_salary.get("currency"))
+        .or_else(|| value_as_string(base_salary.pointer("/value/currency")))
+        .unwrap_or_else(|| "USD".to_string());
+    let symbol = if currency.eq_ignore_ascii_case("USD") { "$" } else { "" };
+
+    let value = base_salary.get("value").unwrap_or(base_salary);
+    let min = value.get("minValue").and_then(Value::as_f64);
+    let max = value.get("maxValue").and_then(Value::as_f64);
+
+    let format_number = |amount: f64| {
+        if amount >= 1000.0 {
+            format!("{symbol}{}K", (amount / 1000.0).round() as i64)
+        } else {
+            format!("{symbol}{}", amount.round() as i64)
+        }
+    };
+
+    match (min, max) {
+        (Some(min_value), Some(max_value)) => {
+            Some(format!("{} - {}", format_number(min_value), format_number(max_value)))
+        }
+        (Some(min_value), None) => Some(format_number(min_value)),
+        (None, Some(max_value)) => Some(format_number(max_value)),
+        _ => value_as_string(base_salary.get("value")),
+    }
+}
+
+fn best_document_title_candidate(value: &str, company: &str) -> Option<String> {
+    let cleaned = clean_text(value);
+
+    if cleaned.is_empty() {
+        return None;
+    }
+
+    let company_normalized = company.trim().to_lowercase();
+    let separator = Regex::new(r"\s(?:\||-|—|–|•|:)\s").unwrap();
+    let mut segments = separator
+        .split(&cleaned)
+        .map(clean_text)
+        .filter(|segment| !segment.is_empty())
+        .collect::<Vec<_>>();
+
+    if segments.is_empty() {
+        segments.push(cleaned.clone());
+    }
+
+    segments
+        .into_iter()
+        .find(|segment| {
+            let normalized = segment.to_lowercase();
+
+            !looks_like_placeholder_title(segment)
+                && normalized != company_normalized
+                && (title_has_role_signal(segment) || segment.split_whitespace().count() >= 2)
+        })
+        .or_else(|| {
+            if looks_like_placeholder_title(&cleaned) {
+                None
+            } else {
+                Some(cleaned)
+            }
+        })
+}
+
+fn rebuild_tags(company: &str, title: &str, location: &str, source: &str) -> Vec<String> {
+    let mut tags = Vec::<String>::new();
+    let normalized_title = title.to_lowercase();
+    let normalized_location = location.to_lowercase();
+    let normalized_source = source.to_lowercase();
+
+    let mut push_tag = |value: &str| {
+        if !tags.iter().any(|existing| existing == value) {
+            tags.push(value.to_string());
+        }
+    };
+
+    if normalized_location.contains("remote") {
+        push_tag("remote");
+    }
+
+    if normalized_title.contains("senior") || normalized_title.contains("staff") {
+        push_tag("senior");
+    }
+
+    if normalized_title.contains("product") {
+        push_tag("product");
+    }
+
+    if normalized_title.contains("engineer") || normalized_title.contains("developer") {
+        push_tag("engineering");
+    }
+
+    if normalized_title.contains("design") {
+        push_tag("design");
+    }
+
+    if normalized_source.contains("linkedin") {
+        push_tag("linkedin");
+    }
+
+    if normalized_source.contains("greenhouse")
+        || normalized_source.contains("lever")
+        || normalized_source.contains("ashbyhq")
+    {
+        push_tag("direct");
+    }
+
+    if !company.trim().is_empty() {
+        push_tag(&company.to_lowercase().replace(' ', "-"));
+    }
+
+    tags
+}
+
+fn enrich_heuristic_from_html(html: &str, heuristic: &ParsedJobDraft) -> ParsedJobDraft {
+    if html.trim().is_empty() {
+        return heuristic.clone();
+    }
+
+    let mut draft = heuristic.clone();
+    let mut page_title = None;
+    let mut page_company = None;
+    let mut page_location = None;
+    let mut page_salary = None;
+
+    for block in extract_json_ld_blocks(html) {
+        let Some(job_posting) = find_job_posting(&block) else {
+            continue;
+        };
+
+        page_title = value_as_string(job_posting.get("title"));
+        page_company = value_as_string(job_posting.pointer("/hiringOrganization/name"));
+        page_location = extract_location_from_job_posting(job_posting);
+        page_salary = extract_salary_from_job_posting(job_posting);
+        break;
+    }
+
+    if let Some(company) = page_company.filter(|value| !value.is_empty()) {
+        draft.company = company;
+    }
+
+    let title_candidate = page_title
+        .or_else(|| extract_meta_content(html, "og:title"))
+        .or_else(|| extract_meta_content(html, "twitter:title"))
+        .or_else(|| extract_tag_text(html, "title"))
+        .and_then(|value| best_document_title_candidate(&value, &draft.company));
+
+    if let Some(title) = title_candidate {
+        if !looks_like_placeholder_title(&title) {
+            draft.title = title;
+        }
+    }
+
+    if let Some(location) = page_location.filter(|value| !value.is_empty()) {
+        draft.location = location;
+    } else if let Some(meta_location) = extract_meta_content(html, "og:description")
+        .filter(|value| value.to_lowercase().contains("remote"))
+    {
+        draft.location = meta_location;
+    }
+
+    if let Some(salary) = page_salary.filter(|value| !value.is_empty()) {
+        draft.salary = Some(salary);
+    }
+
+    draft.tags = rebuild_tags(&draft.company, &draft.title, &draft.location, &draft.source);
+
+    if draft.title != heuristic.title && !looks_like_placeholder_title(&draft.title) {
+        draft.confidence = draft.confidence.max(0.72);
+        draft.notes = format!(
+            "Imported from {}. Page metadata filled in more reliable job details; review the parsed fields before saving.",
+            draft.source
+        );
+    } else if looks_like_placeholder_title(&draft.title) {
+        draft.confidence = draft.confidence.min(0.46);
+        draft.notes = format!(
+            "Imported from {}. The URL and page metadata still did not reveal a reliable role title, so review the parsed fields before saving.",
+            draft.source
+        );
+        draft.title = REVIEW_TITLE.to_string();
+    } else if draft.location != heuristic.location || draft.salary != heuristic.salary {
+        draft.confidence = draft.confidence.max(0.62);
+    }
+
+    if draft.location.trim().is_empty() {
+        draft.location = LOCATION_NOT_LISTED.to_string();
+    }
+
+    draft
 }
 
 fn normalize_string(raw: Option<&Value>, fallback: &str) -> String {
@@ -153,7 +553,7 @@ fn extract_text_from_html(html: &str) -> String {
         .to_string()
 }
 
-async fn fetch_page_excerpt(url: &str) -> String {
+async fn fetch_page_html(url: &str) -> String {
     let client = reqwest::Client::new();
 
     match client
@@ -169,10 +569,7 @@ async fn fetch_page_excerpt(url: &str) -> String {
         .send()
         .await
     {
-        Ok(response) if response.status().is_success() => match response.text().await {
-            Ok(html) => extract_text_from_html(&html).chars().take(12_000).collect(),
-            Err(_) => String::new(),
-        },
+        Ok(response) if response.status().is_success() => response.text().await.unwrap_or_default(),
         _ => String::new(),
     }
 }
@@ -182,9 +579,8 @@ async fn parse_with_xai(
     api_key: &str,
     model: &str,
     heuristic: &ParsedJobDraft,
+    page_excerpt: &str,
 ) -> Result<ParsedJobDraft, String> {
-    let page_excerpt = fetch_page_excerpt(url).await;
-
     let response = reqwest::Client::new()
         .post("https://api.x.ai/v1/responses")
         .bearer_auth(api_key)
@@ -206,7 +602,7 @@ async fn parse_with_xai(
                                 "Parse this job posting into structured JSON.\n\nURL: {}\n\nHeuristic draft: {}\n\n{}",
                                 url,
                                 serde_json::to_string(heuristic).map_err(|error| error.to_string())?,
-                                if page_excerpt.is_empty() {
+                                if page_excerpt.trim().is_empty() {
                                     "Page excerpt unavailable.".to_string()
                                 } else {
                                     format!("Page excerpt: {}", page_excerpt)
@@ -286,6 +682,9 @@ async fn parse_job_url(
     heuristic: ParsedJobDraft,
 ) -> Result<ParsedJobDraft, String> {
     url::Url::parse(&url).map_err(|_| "Enter a valid job URL.".to_string())?;
+    let page_html = fetch_page_html(&url).await;
+    let enriched = enrich_heuristic_from_html(&page_html, &heuristic);
+    let page_excerpt = extract_text_from_html(&page_html).chars().take(12_000).collect::<String>();
 
     let effective_api_key = api_key
         .and_then(|value| {
@@ -305,10 +704,10 @@ async fn parse_job_url(
                     Some(trimmed)
                 }
             })
-        });
+    });
 
     let Some(api_key) = effective_api_key else {
-        return Ok(heuristic);
+        return Ok(enriched);
     };
 
     let effective_model = model
@@ -332,9 +731,9 @@ async fn parse_job_url(
         })
         .unwrap_or_else(|| "grok-4-fast-non-reasoning".to_string());
 
-    match parse_with_xai(&url, &api_key, &effective_model, &heuristic).await {
+    match parse_with_xai(&url, &api_key, &effective_model, &enriched, &page_excerpt).await {
         Ok(parsed) => Ok(parsed),
-        Err(_) => Ok(heuristic),
+        Err(_) => Ok(enriched),
     }
 }
 

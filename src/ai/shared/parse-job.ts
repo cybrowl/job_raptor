@@ -11,6 +11,9 @@ export interface ParsedJobDraft {
   confidence: number;
 }
 
+const REVIEW_TITLE = "Review Role Title";
+const LOCATION_NOT_LISTED = "Location not listed";
+
 const STOP_WORDS = new Set([
   "apply",
   "careers",
@@ -23,11 +26,78 @@ const STOP_WORDS = new Set([
   "openings",
   "view",
   "details",
+  "listing",
   "listings",
   "teams",
+  "team",
+  "roles",
+  "role",
+  "opportunities",
+  "opportunity",
 ]);
 
-const TITLE_CASE_ACRONYMS = new Set(["ai", "ml", "qa", "ui", "ux", "hr", "ios"]);
+const TITLE_CASE_ACRONYMS = new Set([
+  "ai",
+  "ml",
+  "qa",
+  "ui",
+  "ux",
+  "hr",
+  "ios",
+  "api",
+  "sql",
+  "seo",
+  "b2b",
+  "b2c",
+]);
+
+const ATS_HOSTS = new Set([
+  "greenhouse",
+  "lever",
+  "ashbyhq",
+  "workable",
+  "smartrecruiters",
+]);
+
+const ROLE_HINTS = [
+  "engineer",
+  "developer",
+  "designer",
+  "manager",
+  "director",
+  "analyst",
+  "scientist",
+  "architect",
+  "consultant",
+  "specialist",
+  "coordinator",
+  "lead",
+  "head",
+  "product",
+  "program",
+  "marketing",
+  "sales",
+  "account",
+  "operations",
+  "finance",
+  "legal",
+  "support",
+  "success",
+  "recruiter",
+  "talent",
+  "security",
+  "data",
+  "people",
+  "devops",
+  "platform",
+  "software",
+  "frontend",
+  "front-end",
+  "backend",
+  "back-end",
+  "fullstack",
+  "full-stack",
+];
 
 function titleCase(value: string) {
   return value
@@ -35,6 +105,7 @@ function titleCase(value: string) {
     .filter(Boolean)
     .map((part) => {
       const lowered = part.toLowerCase();
+
       if (TITLE_CASE_ACRONYMS.has(lowered)) {
         return lowered.toUpperCase();
       }
@@ -46,9 +117,10 @@ function titleCase(value: string) {
 
 function cleanSegment(value: string) {
   return decodeURIComponent(value)
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
     .replace(/[+_]/g, " ")
     .replace(/[-–—]/g, " ")
-    .replace(/\b\d+\b/g, " ")
+    .replace(/[()[\],]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -56,6 +128,7 @@ function cleanSegment(value: string) {
 function pickDomainLabel(hostname: string) {
   const stripped = hostname.replace(/^www\./, "");
   const parts = stripped.split(".");
+
   if (parts.length <= 2) {
     return parts[0] ?? stripped;
   }
@@ -63,11 +136,48 @@ function pickDomainLabel(hostname: string) {
   return parts[parts.length - 2] ?? stripped;
 }
 
+function isUuidLike(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value.trim());
+}
+
+function looksLikeOpaqueIdentifier(value: string) {
+  const raw = value.trim();
+
+  if (!raw) {
+    return false;
+  }
+
+  if (isUuidLike(raw)) {
+    return true;
+  }
+
+  const normalized = raw.toLowerCase().replace(/[\s_-]+/g, "");
+
+  if (normalized.length < 10 || !/^[a-z0-9]+$/.test(normalized)) {
+    return false;
+  }
+
+  const digitCount = [...normalized].filter((character) => /\d/.test(character)).length;
+  const vowelCount = [...normalized].filter((character) => /[aeiou]/.test(character)).length;
+  const hexish = /^[a-f0-9]+$/i.test(normalized);
+
+  if (hexish && normalized.length >= 12) {
+    return true;
+  }
+
+  return digitCount / normalized.length >= 0.28 && vowelCount / normalized.length <= 0.18;
+}
+
+function hasRoleSignal(value: string) {
+  const normalized = value.toLowerCase();
+  return ROLE_HINTS.some((hint) => normalized.includes(hint));
+}
+
 function getCompany(url: URL) {
   const companyHints = [
     url.searchParams.get("company"),
-    url.searchParams.get("gh_src"),
     url.searchParams.get("organization"),
+    url.searchParams.get("org"),
   ]
     .filter(Boolean)
     .map((value) => cleanSegment(value as string));
@@ -79,50 +189,103 @@ function getCompany(url: URL) {
   const pathParts = url.pathname.split("/").filter(Boolean);
   const hostLabel = pickDomainLabel(url.hostname);
 
-  if (["greenhouse", "lever", "ashbyhq", "workable", "smartrecruiters"].includes(hostLabel)) {
-    const candidate = pathParts[0] ?? "";
-    return titleCase(cleanSegment(candidate || hostLabel));
+  if (ATS_HOSTS.has(hostLabel)) {
+    const candidate = cleanSegment(pathParts[0] ?? "");
+    return titleCase(candidate || hostLabel);
   }
 
   if (!["linkedin", "indeed", "ziprecruiter"].includes(hostLabel)) {
     return titleCase(cleanSegment(hostLabel));
   }
 
+  if (hostLabel === "linkedin" && pathParts[0] === "company" && pathParts[1]) {
+    return titleCase(cleanSegment(pathParts[1]));
+  }
+
   return titleCase(cleanSegment(pathParts[0] || hostLabel));
 }
 
-function getTitle(url: URL) {
+function isMeaningfulTitleSegment(
+  cleaned: string,
+  raw: string,
+  company: string
+) {
+  if (!cleaned || looksLikeOpaqueIdentifier(raw) || looksLikeOpaqueIdentifier(cleaned)) {
+    return false;
+  }
+
+  const normalizedCompany = company.trim().toLowerCase();
+  const normalizedCleaned = cleaned.trim().toLowerCase();
+
+  if (normalizedCompany && normalizedCleaned === normalizedCompany) {
+    return false;
+  }
+
+  const tokens = normalizedCleaned
+    .split(/\s+/)
+    .filter((token) => token && !STOP_WORDS.has(token));
+
+  if (tokens.length === 0) {
+    return false;
+  }
+
+  if (hasRoleSignal(normalizedCleaned)) {
+    return true;
+  }
+
+  if (tokens.length >= 2) {
+    return true;
+  }
+
+  return tokens.some((token) => token.length >= 6 && !looksLikeOpaqueIdentifier(token));
+}
+
+function getTitle(url: URL, company: string) {
   const explicit =
     url.searchParams.get("title") ??
     url.searchParams.get("job_title") ??
-    url.searchParams.get("position");
+    url.searchParams.get("position") ??
+    url.searchParams.get("role");
 
   if (explicit) {
-    return titleCase(cleanSegment(explicit));
+    return {
+      title: titleCase(cleanSegment(explicit)),
+      reliable: true,
+    };
   }
 
-  const candidates = url.pathname
-    .split("/")
-    .filter(Boolean)
-    .map(cleanSegment)
+  const hostLabel = pickDomainLabel(url.hostname);
+  const rawParts = url.pathname.split("/").filter(Boolean);
+  const titleParts =
+    ATS_HOSTS.has(hostLabel) && rawParts.length > 1 ? rawParts.slice(1) : rawParts;
+
+  const candidates = titleParts
+    .map((part) => ({
+      raw: part,
+      cleaned: cleanSegment(part),
+    }))
     .reverse();
 
-  const selected =
-    candidates.find((part) => {
-      const tokens = part
-        .toLowerCase()
-        .split(/\s+/)
-        .filter((token) => token && !STOP_WORDS.has(token));
+  const selected = candidates.find((candidate) =>
+    isMeaningfulTitleSegment(candidate.cleaned, candidate.raw, company)
+  );
 
-      return tokens.length >= 2;
-    }) ?? candidates[0] ?? "New role";
+  if (!selected) {
+    return {
+      title: REVIEW_TITLE,
+      reliable: false,
+    };
+  }
 
-  const cleaned = selected
+  const cleaned = selected.cleaned
     .split(/\s+/)
     .filter((token) => token && !STOP_WORDS.has(token.toLowerCase()))
     .join(" ");
 
-  return titleCase(cleaned || selected);
+  return {
+    title: titleCase(cleaned || selected.cleaned),
+    reliable: true,
+  };
 }
 
 function getLocation(url: URL) {
@@ -149,7 +312,7 @@ function getLocation(url: URL) {
     return "On-site";
   }
 
-  return "Location not listed";
+  return LOCATION_NOT_LISTED;
 }
 
 function getSalary(url: URL) {
@@ -204,7 +367,11 @@ function getTags(
     tags.add("linkedin");
   }
 
-  if (normalizedSource.includes("greenhouse") || normalizedSource.includes("lever")) {
+  if (
+    normalizedSource.includes("greenhouse") ||
+    normalizedSource.includes("lever") ||
+    normalizedSource.includes("ashbyhq")
+  ) {
     tags.add("direct");
   }
 
@@ -230,30 +397,35 @@ export function parseJobUrl(input: string): ParsedJobDraft {
 
   const source = url.hostname.replace(/^www\./, "");
   const company = getCompany(url);
-  const title = getTitle(url);
+  const titleResult = getTitle(url, company);
   const location = getLocation(url);
   const salary = getSalary(url);
-  const tags = getTags(company, title, location, source);
+  const tags = getTags(company, titleResult.title, location, source);
 
   const confidence = clamp(
-    0.4 +
-      (company ? 0.15 : 0) +
-      (title ? 0.2 : 0) +
-      (location && location !== "Location not listed" ? 0.15 : 0) +
+    0.3 +
+      (company ? 0.16 : 0) +
+      (titleResult.reliable ? 0.24 : 0.02) +
+      (location !== LOCATION_NOT_LISTED ? 0.12 : 0) +
       (salary ? 0.08 : 0) +
-      (tags.length > 0 ? 0.06 : 0),
-    0.45,
+      (tags.length > 0 ? 0.06 : 0) -
+      (titleResult.reliable ? 0 : 0.16),
+    0.34,
     0.96
   );
+
+  const notes = titleResult.reliable
+    ? `Imported from ${source}. Review the parsed fields before saving.`
+    : `Imported from ${source}. The URL did not reveal a reliable role title, so review the parsed fields before saving.`;
 
   return {
     url: url.toString(),
     company,
-    title,
+    title: titleResult.title,
     location,
     salary,
     source,
-    notes: `Imported from ${source}. Review the parsed fields before saving.`,
+    notes,
     tags,
     status: "Applied",
     confidence,
