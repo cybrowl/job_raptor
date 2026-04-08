@@ -26,7 +26,7 @@
     isActiveStatus,
   } from "$lib/utils";
 
-  type WorkspaceView = "table" | "board" | "analytics";
+  type WorkspaceView = "table" | "board" | "analytics" | "settings";
   type TrendDirection = "up" | "down" | "flat";
 
   interface ParseToast {
@@ -607,7 +607,7 @@
             <p class="eyebrow">Capture Loop</p>
             <h2 class="title">Keep New Roles Moving Without Extra Review Steps.</h2>
             <p class="body">
-              Every saved role lands in the pipeline immediately, and you can still tweak fields later from edit.
+              Every saved role lands in the pipeline immediately, and you can still tweak fields later from edit or refresh older ones from the workspace.
             </p>
           </div>
 
@@ -635,10 +635,129 @@
               </div>
             </div>
           {/if}
+        </div>
+      </div>
 
-          <details class="settings-disclosure">
-            <summary>Parser Settings</summary>
-            <div class="panel-grid settings-stack">
+      <div class="metric-grid metric-grid-hero">
+        <MetricCard
+          eyebrow="Pipeline"
+          value={String(metrics.totalApplications)}
+          trend={totalTrend.label}
+          trendDirection={totalTrend.direction}
+          sparkline={recentCreatedSeries}
+          note="All Tracked Roles Across The Search."
+        />
+        <MetricCard
+          eyebrow="Active"
+          value={String(metrics.activePipeline)}
+          trend={activeTrend.label}
+          trendDirection={activeTrend.direction}
+          sparkline={recentActiveSeries}
+          note="Roles Still Moving Through The Funnel."
+        />
+        <MetricCard
+          eyebrow="This Week"
+          value={String(metrics.appliedThisWeek)}
+          trend={appliedTrend.label}
+          trendDirection={appliedTrend.direction}
+          sparkline={recentAppliedSeries}
+          note="Fresh Applications Over Seven Days."
+        />
+        <MetricCard
+          eyebrow="Response"
+          value={formatPercent(metrics.responseRate)}
+          tone={metrics.responseRate >= 30 ? "positive" : metrics.responseRate > 0 ? "warning" : "danger"}
+          trend={responseTrend.label}
+          trendDirection={responseTrend.direction}
+          sparkline={recentResponseSeries}
+          note={`${metrics.staleCount} Stalled Thread${metrics.staleCount === 1 ? "" : "s"} Flagged.`}
+        />
+      </div>
+    </section>
+
+    <div class:dashboard-grid-table={activeView === "table"} class="dashboard-grid">
+      <div class="content-stack">
+        <section class="panel">
+          <p class="eyebrow">Smart Filter</p>
+          <h2 class="title">Search The Pipeline Fast.</h2>
+          <FilterBar bind:value={query} />
+          <p class="micro">
+            Search feels best when you start with company, stage, or source and then narrow from there.
+          </p>
+        </section>
+      </div>
+
+      <div class="content-stack">
+        <section class="panel workspace-switcher-panel">
+          <div class="workspace-switcher-row">
+            <div class="panel-grid" style="gap: 0.25rem;">
+              <p class="eyebrow">Workspace</p>
+              <h2 class="title">Focus On One View At A Time.</h2>
+            </div>
+            <div class="segmented-control" role="tablist" aria-label="Workspace view">
+              <button
+                type="button"
+                class:segmented-button-active={activeView === "table"}
+                class="segmented-button"
+                on:click={() => (activeView = "table")}
+              >
+                Table
+              </button>
+              <button
+                type="button"
+                class:segmented-button-active={activeView === "board"}
+                class="segmented-button"
+                on:click={() => (activeView = "board")}
+              >
+                Board
+              </button>
+              <button
+                type="button"
+                class:segmented-button-active={activeView === "analytics"}
+                class="segmented-button"
+                on:click={() => (activeView = "analytics")}
+              >
+                Analytics
+              </button>
+              <button
+                type="button"
+                class:segmented-button-active={activeView === "settings"}
+                class="segmented-button"
+                on:click={() => (activeView = "settings")}
+              >
+                Settings
+              </button>
+            </div>
+          </div>
+        </section>
+
+        {#if activeView === "table"}
+          <ApplicationsTable
+            applications={filteredApplications}
+            busy={$applicationsStore.syncing || resyncingApplications}
+            on:edit={handleEdit}
+            on:remove={handleRemove}
+            on:resyncall={handleResyncAll}
+            on:statuschange={handleStatusChange}
+          />
+        {:else if activeView === "board"}
+          <KanbanBoard
+            applications={filteredApplications}
+            busy={$applicationsStore.syncing}
+            on:edit={handleEdit}
+            on:quickadd={handleQuickAdd}
+            on:statuschange={handleStatusChange}
+          />
+        {:else if activeView === "analytics"}
+          <AnalyticsPanel metrics={metrics} />
+        {:else}
+          <section class="panel">
+            <div class="panel-grid settings-panel-body">
+              <div class="panel-grid" style="gap: 0.25rem;">
+                <p class="eyebrow">Settings</p>
+                <h2 class="title">Parser, Resume, And Local Backup Controls.</h2>
+              </div>
+
               <div class="field">
                 <p class="field-label">Grok Api Key</p>
                 <div class="quick-parse-bar">
@@ -669,8 +788,7 @@
               {/if}
 
               <p class="micro">
-                Save an xAI key for richer native parsing. Leave it blank to stay
-                in heuristic mode.
+                Save an xAI key for richer native parsing. Leave it blank to stay in heuristic mode.
               </p>
 
               <div class="settings-divider"></div>
@@ -765,114 +883,7 @@
                 <p class="micro">{backupStatus}</p>
               {/if}
             </div>
-          </details>
-        </div>
-      </div>
-
-      <div class="metric-grid metric-grid-hero">
-        <MetricCard
-          eyebrow="Pipeline"
-          value={String(metrics.totalApplications)}
-          trend={totalTrend.label}
-          trendDirection={totalTrend.direction}
-          sparkline={recentCreatedSeries}
-          note="All Tracked Roles Across The Search."
-        />
-        <MetricCard
-          eyebrow="Active"
-          value={String(metrics.activePipeline)}
-          trend={activeTrend.label}
-          trendDirection={activeTrend.direction}
-          sparkline={recentActiveSeries}
-          note="Roles Still Moving Through The Funnel."
-        />
-        <MetricCard
-          eyebrow="This Week"
-          value={String(metrics.appliedThisWeek)}
-          trend={appliedTrend.label}
-          trendDirection={appliedTrend.direction}
-          sparkline={recentAppliedSeries}
-          note="Fresh Applications Over Seven Days."
-        />
-        <MetricCard
-          eyebrow="Response"
-          value={formatPercent(metrics.responseRate)}
-          tone={metrics.responseRate >= 30 ? "positive" : metrics.responseRate > 0 ? "warning" : "danger"}
-          trend={responseTrend.label}
-          trendDirection={responseTrend.direction}
-          sparkline={recentResponseSeries}
-          note={`${metrics.staleCount} Stalled Thread${metrics.staleCount === 1 ? "" : "s"} Flagged.`}
-        />
-      </div>
-    </section>
-
-    <div class:dashboard-grid-table={activeView === "table"} class="dashboard-grid">
-      <div class="content-stack">
-        <section class="panel">
-          <p class="eyebrow">Smart Filter</p>
-          <h2 class="title">Search The Pipeline Fast.</h2>
-          <FilterBar bind:value={query} />
-          <p class="micro">
-            Search feels best when you start with company, stage, or source and then narrow from there.
-          </p>
-        </section>
-      </div>
-
-      <div class="content-stack">
-        <section class="panel workspace-switcher-panel">
-          <div class="workspace-switcher-row">
-            <div class="panel-grid" style="gap: 0.25rem;">
-              <p class="eyebrow">Workspace</p>
-              <h2 class="title">Focus On One View At A Time.</h2>
-            </div>
-            <div class="segmented-control" role="tablist" aria-label="Workspace view">
-              <button
-                type="button"
-                class:segmented-button-active={activeView === "table"}
-                class="segmented-button"
-                on:click={() => (activeView = "table")}
-              >
-                Table
-              </button>
-              <button
-                type="button"
-                class:segmented-button-active={activeView === "board"}
-                class="segmented-button"
-                on:click={() => (activeView = "board")}
-              >
-                Board
-              </button>
-              <button
-                type="button"
-                class:segmented-button-active={activeView === "analytics"}
-                class="segmented-button"
-                on:click={() => (activeView = "analytics")}
-              >
-                Analytics
-              </button>
-            </div>
-          </div>
-        </section>
-
-        {#if activeView === "table"}
-          <ApplicationsTable
-            applications={filteredApplications}
-            busy={$applicationsStore.syncing || resyncingApplications}
-            on:edit={handleEdit}
-            on:remove={handleRemove}
-            on:resyncall={handleResyncAll}
-            on:statuschange={handleStatusChange}
-          />
-        {:else if activeView === "board"}
-          <KanbanBoard
-            applications={filteredApplications}
-            busy={$applicationsStore.syncing}
-            on:edit={handleEdit}
-            on:quickadd={handleQuickAdd}
-            on:statuschange={handleStatusChange}
-          />
-        {:else}
-          <AnalyticsPanel metrics={metrics} />
+          </section>
         {/if}
       </div>
     </div>
