@@ -109,17 +109,14 @@
     ),
     "responses this week"
   );
+  $: recentReplyCount = recentResponseSeries.reduce((total, count) => total + count, 0);
   $: quickParseProvider = xAiApiKeyDraft.trim()
     ? isTauriRuntime()
-      ? `Grok Parser • ${resumeProfile.rawText ? "Fit Scoring On" : xAiModelDraft}`
+      ? resumeProfile.rawText
+        ? "Fit Scoring On"
+        : "Grok Ready"
       : "Saved Grok Key"
-    : "Heuristic Parser";
-
-  function openCreate() {
-    editingApplication = null;
-    composerSeed = quickUrl.trim() ? { url: quickUrl.trim() } : null;
-    showComposer = true;
-  }
+    : "Fast Local";
 
   function handleEdit(event: CustomEvent<JobApplication>) {
     editingApplication = event.detail;
@@ -238,7 +235,7 @@
 
   async function handleQuickParse() {
     if (!quickUrl.trim()) {
-      quickParseError = "Paste A Job Url Before Running The Parser.";
+      quickParseError = "Paste A Job URL First.";
       return;
     }
 
@@ -276,17 +273,17 @@
       quickParseSummary = `${nextInput.company} • ${nextInput.title}`;
       quickUrl = "";
       showParseToast(
-        "Added To Pipeline",
+        "Captured",
         `${nextInput.company} landed in ${nextInput.status} in ${formatSeconds(
           performance.now() - startedAt
-        )} via ${xAiApiKeyDraft.trim() ? "Grok" : "Heuristic Mode"}${
+        )} with ${xAiApiKeyDraft.trim() ? "Grok" : "Fast Local"}${
           nextInput.fitSummary && nextInput.confidence !== null
-            ? ` • Fit ${Math.round(nextInput.confidence * 100)}%`
+            ? ` • ${Math.round(nextInput.confidence * 100)}% match`
             : ""
         }.`
       );
     } catch (error) {
-      quickParseError = error instanceof Error ? error.message : "Unknown Parsing Error.";
+      quickParseError = error instanceof Error ? error.message : "Something went wrong while capturing this role.";
     } finally {
       quickParseLoading = false;
     }
@@ -297,7 +294,7 @@
     const resumableApplications = applications.filter((application) => application.url.trim());
 
     if (resumableApplications.length === 0) {
-      showParseToast("Nothing To Resync", "Saved jobs need a source URL before they can be refreshed.");
+      showParseToast("Nothing To Refresh", "Saved jobs need a source URL before they can be refreshed.");
       return;
     }
 
@@ -340,13 +337,13 @@
       }
 
       showParseToast(
-        "Applications Resynced",
+        "Pipeline Refreshed",
         `${updates.length} refreshed${failed > 0 ? ` • ${failed} failed` : ""}${skipped > 0 ? ` • ${skipped} skipped` : ""}.`
       );
     } catch (error) {
       showParseToast(
-        "Resync Failed",
-        error instanceof Error ? error.message : "Unable To Resync Saved Jobs."
+        "Refresh Failed",
+        error instanceof Error ? error.message : "Unable to refresh the pipeline."
       );
     } finally {
       resyncingApplications = false;
@@ -540,17 +537,16 @@
           <p class="eyebrow">Job Raptor Desktop</p>
           <h1 class="hero-heading">
             Paste A Job.
-            <span>Catch It Fast.</span>
+            <span>Capture It Instantly.</span>
           </h1>
           <p class="body">
-            Drop in a careers link and Job Raptor will parse it, save it,
-            and move it straight into your pipeline in one click.
+            Drop any careers link and Job Raptor instantly parses it with Grok, saves every detail, and lands it straight in your pipeline in one click.
           </p>
 
           <form class="panel-grid parser-spotlight" on:submit|preventDefault={handleQuickParse}>
             <div class="field">
               <div class="meta-row">
-                <p class="field-label">Primary Capture</p>
+                <p class="field-label">Grok Ai</p>
                 <span class="meta-pill">
                   {quickParseProvider}
                 </span>
@@ -566,21 +562,18 @@
                   class="ghost-button"
                   disabled={quickParseLoading}
                 >
-                  {quickParseLoading ? "Adding Role" : "Add From Url"}
+                  {quickParseLoading ? "Capturing" : "Capture Job"}
                 </button>
               </div>
             </div>
             <p class="micro">
-              One click parses the posting and saves it directly. Use manual add only when you need full control.
+              One-click parse and save. Edit details anytime from the table.
             </p>
           </form>
 
           <div class="meta-row">
             <span class="meta-pill">{storageModeLabel}</span>
             <span class="meta-pill">Offline First</span>
-            <button type="button" class="ghost-button ghost-button-small" on:click={openCreate}>
-              Add Manually
-            </button>
           </div>
 
           {#if $applicationsStore.error}
@@ -590,10 +583,10 @@
 
         <div class="panel-grid hero-secondary">
           <div class="panel-grid" style="gap: 0.35rem;">
-            <p class="eyebrow">Capture Loop</p>
-            <h2 class="title">Keep New Roles Moving Without Extra Review Steps.</h2>
+            <p class="eyebrow">Instant Capture</p>
+            <h2 class="title">Keep Every New Role Moving. No Extra Steps.</h2>
             <p class="body">
-              Every saved role lands in the pipeline immediately, and you can still tweak fields later from edit or refresh older ones from the workspace.
+              Every role you capture flows directly into your pipeline. Edit or refresh details anytime from the workspace.
             </p>
           </div>
 
@@ -602,7 +595,7 @@
               <div class="feedback-inline">
                 <span class="pulse-dot" aria-hidden="true"></span>
                 <span class="micro">
-                  Parsing And Saving With {xAiApiKeyDraft.trim() ? "Grok" : "Heuristic Mode"}.
+                  Capturing With {xAiApiKeyDraft.trim() ? "Grok" : "Fast Local"}.
                 </span>
               </div>
             </div>
@@ -613,10 +606,10 @@
           {:else if quickParseSummary}
             <div class="parser-feedback parser-feedback-success">
               <div class="panel-grid" style="gap: 0.25rem;">
-                <p class="field-label">Latest Add</p>
+                <p class="field-label">Just Captured</p>
                 <p class="table-title">{quickParseSummary}</p>
                 <p class="micro">
-                  Added straight to the pipeline. Edit it anytime from the workspace below.
+                  Saved to the pipeline. Fine-tune it anytime from the table below.
                 </p>
               </div>
             </div>
@@ -631,7 +624,7 @@
           trend={totalTrend.label}
           trendDirection={totalTrend.direction}
           sparkline={recentCreatedSeries}
-          note="All Tracked Roles Across The Search."
+          note="All Tracked Roles Across Your Search."
         />
         <MetricCard
           eyebrow="Active"
@@ -639,7 +632,7 @@
           trend={activeTrend.label}
           trendDirection={activeTrend.direction}
           sparkline={recentActiveSeries}
-          note="Roles Still Moving Through The Funnel."
+          note="Roles Still Moving Forward Right Now."
         />
         <MetricCard
           eyebrow="This Week"
@@ -647,7 +640,7 @@
           trend={appliedTrend.label}
           trendDirection={appliedTrend.direction}
           sparkline={recentAppliedSeries}
-          note="Fresh Applications Over Seven Days."
+          note="Fresh Applications Added In The Last 7 Days."
         />
         <MetricCard
           eyebrow="Response"
@@ -656,7 +649,7 @@
           trend={responseTrend.label}
           trendDirection={responseTrend.direction}
           sparkline={recentResponseSeries}
-          note={`${metrics.staleCount} Stalled Thread${metrics.staleCount === 1 ? "" : "s"} Flagged.`}
+          note={`${recentReplyCount} ${recentReplyCount === 1 ? "Reply" : "Replies"} This Week • ${metrics.staleCount} Stalled`}
         />
       </div>
     </section>
@@ -667,7 +660,7 @@
           <div class="workspace-switcher-row">
             <div class="panel-grid" style="gap: 0.25rem;">
               <p class="eyebrow">Workspace</p>
-              <h2 class="title">Focus On One View At A Time.</h2>
+              <h2 class="title">One View At A Time.</h2>
             </div>
             <div class="segmented-control" role="tablist" aria-label="Workspace view">
               <button

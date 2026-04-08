@@ -156,7 +156,7 @@
           disabled={busy || applications.length === 0}
           on:click={() => dispatch("resyncall")}
         >
-          {busy ? "Working" : "Resync Saved Jobs"}
+          {busy ? "Refreshing" : "Refresh Pipeline"}
         </button>
         <span class="meta-pill">{applications.length} Visible</span>
       </div>
@@ -184,7 +184,7 @@
             </th>
             <th aria-sort={getAriaSort("confidence")}>
               <button type="button" class="sort-button" on:click={() => toggleSort("confidence")}>
-                <span>Confidence</span>
+                <span>Ai Confidence</span>
                 <span class:sort-icon-active={sortKey === "confidence"} class="sort-icon" aria-hidden="true">
                   {getSortIcon("confidence")}
                 </span>
@@ -261,7 +261,7 @@
                     {application.fitSummary
                       ? "Resume Match"
                       : application.parseConfidence !== null
-                        ? "Parse Confidence"
+                        ? "Ai Confidence"
                         : "Saved Manually"}
                   </span>
                 </div>
