@@ -568,19 +568,6 @@
             Search feels best when you start with company, stage, or source and then narrow from there.
           </p>
         </section>
-
-        <section class="panel">
-          <p class="eyebrow">Pipeline Insight</p>
-          <h2 class="title">What Needs Attention Next.</h2>
-          <div class="panel-grid">
-            <p class="body">{metrics.insight}</p>
-            <div class="meta-row">
-              <span class="meta-pill">{filteredApplications.length} In Current View</span>
-              <span class="meta-pill">{metrics.staleCount} Need Follow-Up</span>
-            </div>
-            <p class="micro">Use filters on the left, then switch the workspace to table, board, or analytics.</p>
-          </div>
-        </section>
       </div>
 
       <div class="content-stack">
