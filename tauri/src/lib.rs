@@ -26,6 +26,13 @@ struct ParsedJobDraft {
     confidence: f64,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ImportedBackupFile {
+    contents: String,
+    path: String,
+}
+
 const REVIEW_TITLE: &str = "Review Role Title";
 const LOCATION_NOT_LISTED: &str = "Location not listed";
 const ROLE_HINTS: &[&str] = &[
@@ -845,7 +852,7 @@ async fn export_backup_file(
 }
 
 #[tauri::command]
-async fn import_backup_file(app: AppHandle) -> Result<Option<String>, String> {
+async fn import_backup_file(app: AppHandle) -> Result<Option<ImportedBackupFile>, String> {
     let selected = tauri::async_runtime::spawn_blocking(move || {
         app.dialog()
             .file()
@@ -861,13 +868,17 @@ async fn import_backup_file(app: AppHandle) -> Result<Option<String>, String> {
     };
 
     let path = resolve_dialog_path(file_path)?;
+    let saved_path = path.display().to_string();
 
     let contents = tauri::async_runtime::spawn_blocking(move || fs::read_to_string(&path))
         .await
         .map_err(|error| error.to_string())?
         .map_err(|error| error.to_string())?;
 
-    Ok(Some(contents))
+    Ok(Some(ImportedBackupFile {
+        contents,
+        path: saved_path,
+    }))
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

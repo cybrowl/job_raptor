@@ -52,6 +52,15 @@ interface ApplicationRow {
   last_updated: number;
 }
 
+interface TableInfoRow {
+  name: string;
+}
+
+interface PickedBackupFile {
+  text: string;
+  name: string;
+}
+
 let dbPromise: Promise<Database> | null = null;
 
 function createEmptyResumeProfile(): ResumeProfile {
@@ -228,6 +237,18 @@ function parseBackup(raw: unknown): JobRaptorBackup {
   };
 }
 
+export function parseBackupText(text: string) {
+  let parsed: unknown;
+
+  try {
+    parsed = JSON.parse(text);
+  } catch (error) {
+    throw new Error("That backup file is not valid JSON.");
+  }
+
+  return parseBackup(parsed);
+}
+
 function parseTags(value: string) {
   try {
     const parsed = JSON.parse(value) as unknown;
@@ -266,8 +287,36 @@ async function getDatabase() {
     throw new Error("SQLite is only available inside the Tauri desktop shell.");
   }
 
-  dbPromise ??= Database.load(DB_URL);
+  dbPromise ??= (async () => {
+    const db = await Database.load(DB_URL);
+    await ensureApplicationColumns(db);
+    return db;
+  })();
   return dbPromise;
+}
+
+async function ensureApplicationColumns(db: Database) {
+  const columns = await db.select<TableInfoRow[]>("PRAGMA table_info(applications)");
+
+  if (!columns.length) {
+    return;
+  }
+
+  const names = new Set(columns.map((column) => column.name));
+
+  if (!names.has("parse_confidence")) {
+    await db.execute("ALTER TABLE applications ADD COLUMN parse_confidence REAL");
+  }
+
+  if (!names.has("fit_summary")) {
+    await db.execute("ALTER TABLE applications ADD COLUMN fit_summary TEXT NOT NULL DEFAULT ''");
+  }
+
+  if (!names.has("job_description")) {
+    await db.execute(
+      "ALTER TABLE applications ADD COLUMN job_description TEXT NOT NULL DEFAULT ''"
+    );
+  }
 }
 
 export function getPersistenceDriver(): StorageDriver {
@@ -650,7 +699,7 @@ function createBackupFilename() {
 }
 
 async function readBackupFromBrowserPicker() {
-  return await new Promise<string | null>((resolve) => {
+  return await new Promise<PickedBackupFile | null>((resolve) => {
     const input = document.createElement("input");
     input.type = "file";
     input.accept = ".json,application/json";
@@ -664,7 +713,10 @@ async function readBackupFromBrowserPicker() {
           return;
         }
 
-        resolve(await file.text());
+        resolve({
+          text: await file.text(),
+          name: file.name,
+        });
       },
       { once: true }
     );
@@ -712,37 +764,47 @@ export async function exportBackupToFile() {
 }
 
 export async function importBackupFromFile() {
-  let text: string | null = null;
+  let selectedFile: PickedBackupFile | null = null;
 
   if (getStorageDriver() === "sqlite") {
-    const { invoke } = await import("@tauri-apps/api/core");
-    text = await invoke<string | null>("import_backup_file");
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      const selected = await invoke<{ contents: string; path: string } | null>(
+        "import_backup_file"
+      );
 
-    if (text === null) {
-      return { cancelled: true as const };
+      if (selected === null) {
+        return { cancelled: true as const };
+      }
+
+      selectedFile = {
+        text: selected.contents,
+        name: selected.path,
+      };
+    } catch (error) {
+      const fallback = await readBackupFromBrowserPicker();
+
+      if (fallback === null) {
+        throw error;
+      }
+
+      selectedFile = fallback;
     }
   } else {
-    text = await readBackupFromBrowserPicker();
-
-    if (text === null) {
-      return { cancelled: true as const };
-    }
+    selectedFile = await readBackupFromBrowserPicker();
   }
 
-  let parsed: unknown;
-
-  try {
-    parsed = JSON.parse(text);
-  } catch (error) {
-    throw new Error("That backup file is not valid JSON.");
+  if (selectedFile === null) {
+    return { cancelled: true as const };
   }
 
-  const backup = parseBackup(parsed);
+  const backup = parseBackupText(selectedFile.text);
 
   await replaceAllLocalData(backup);
 
   return {
     cancelled: false as const,
     applications: backup.applications.length,
+    source: selectedFile.name,
   };
 }

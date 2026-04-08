@@ -432,7 +432,7 @@
 
       backupStatus = `Backup Exported To ${result.path}.`;
     } catch (error) {
-      backupStatus = error instanceof Error ? error.message : "Unable To Export Backup.";
+      backupStatus = error instanceof Error ? error.message : String(error) || "Unable To Export Backup.";
     } finally {
       backupBusy = false;
     }
@@ -457,9 +457,9 @@
       quickParseSummary = "";
       quickParseError = "";
       await Promise.all([applicationsStore.load(), loadParserSettings()]);
-      backupStatus = `Imported ${result.applications} Application${result.applications === 1 ? "" : "s"} From Backup.`;
+      backupStatus = `Imported ${result.applications} Application${result.applications === 1 ? "" : "s"} From ${result.source}.`;
     } catch (error) {
-      backupStatus = error instanceof Error ? error.message : "Unable To Import Backup.";
+      backupStatus = error instanceof Error ? error.message : String(error) || "Unable To Import Backup.";
     } finally {
       backupBusy = false;
     }

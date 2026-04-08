@@ -1,0 +1,253 @@
+{
+  "kind": "job-raptor-backup",
+  "version": 1,
+  "exportedAt": "2026-04-08T18:31:36.326Z",
+  "storage": "sqlite",
+  "applications": [
+    {
+      "id": 12,
+      "url": "https://job-boards.greenhouse.io/webflow/jobs/7166510",
+      "company": "Webflow",
+      "title": "Senior Software Engineer, Webflow Cloud",
+      "location": "CA Remote (BC & ON only); U.S. Remote",
+      "salary": null,
+      "appliedDate": 1775632354863,
+      "status": "Wishlist",
+      "source": "job-boards.greenhouse.io",
+      "notes": "Imported from job-boards.greenhouse.io. Page metadata filled in more reliable job details; review the parsed fields before saving.",
+      "tags": [
+        "remote",
+        "senior",
+        "engineering",
+        "direct",
+        "webflow"
+      ],
+      "confidence": 0.76,
+      "createdAt": 1775632354863,
+      "lastUpdated": 1775633397197
+    },
+    {
+      "id": 10,
+      "url": "https://thrivemarketjobs.com/job_posting.html?id=4174211009",
+      "company": "Thrivemarketjobs",
+      "title": "Jobs at Thrive Market",
+      "location": "Location not listed",
+      "salary": null,
+      "appliedDate": 1775632342250,
+      "status": "Rejected",
+      "source": "thrivemarketjobs.com",
+      "notes": "Imported from thrivemarketjobs.com. Page metadata filled in more reliable job details; review the parsed fields before saving.",
+      "tags": [
+        "thrivemarketjobs"
+      ],
+      "confidence": 0.76,
+      "createdAt": 1775632342250,
+      "lastUpdated": 1775633373333
+    },
+    {
+      "id": 3,
+      "url": "https://jobs.ashbyhq.com/nerdwallet/c9c37214-b81f-4122-8447-1c0a2c915771",
+      "company": "NerdWallet",
+      "title": "Senior Software Engineer Full-Stack /Data Engineering Focus (CLAW)",
+      "location": "United States",
+      "salary": "$136K - $252K",
+      "appliedDate": 1775606400000,
+      "status": "Wishlist",
+      "source": "jobs.ashbyhq.com",
+      "notes": "Imported from jobs.ashbyhq.com. Page metadata filled in more reliable job details; review the parsed fields before saving.",
+      "tags": [
+        "senior",
+        "engineering",
+        "direct",
+        "nerdwallet"
+      ],
+      "confidence": 0.72,
+      "createdAt": 1775631644315,
+      "lastUpdated": 1775632458148
+    },
+    {
+      "id": 11,
+      "url": "https://picogrid.com/careers/frontend-tech-lead",
+      "company": "Picogrid",
+      "title": "Frontend Tech Lead",
+      "location": "Location not listed",
+      "salary": null,
+      "appliedDate": 1775632350241,
+      "status": "Applied",
+      "source": "picogrid.com",
+      "notes": "Imported from picogrid.com. Review the parsed fields before saving.",
+      "tags": [
+        "picogrid"
+      ],
+      "confidence": 0.76,
+      "createdAt": 1775632350241,
+      "lastUpdated": 1775632350241
+    },
+    {
+      "id": 9,
+      "url": "https://job-boards.eu.greenhouse.io/stubhubinc/jobs/4755032101",
+      "company": "Stubhubinc",
+      "title": "Software Engineer II",
+      "location": "Location not listed",
+      "salary": null,
+      "appliedDate": 1775632335375,
+      "status": "Applied",
+      "source": "job-boards.eu.greenhouse.io",
+      "notes": "Imported from job-boards.eu.greenhouse.io. Page metadata filled in more reliable job details; review the parsed fields before saving.",
+      "tags": [
+        "engineering",
+        "direct",
+        "stubhubinc"
+      ],
+      "confidence": 0.72,
+      "createdAt": 1775632335375,
+      "lastUpdated": 1775632335375
+    },
+    {
+      "id": 8,
+      "url": "https://job-boards.eu.greenhouse.io/stubhubinc/jobs/4825353101",
+      "company": "Stubhubinc",
+      "title": "Software Engineer II",
+      "location": "Location not listed",
+      "salary": null,
+      "appliedDate": 1775632328041,
+      "status": "Applied",
+      "source": "job-boards.eu.greenhouse.io",
+      "notes": "Imported from job-boards.eu.greenhouse.io. Page metadata filled in more reliable job details; review the parsed fields before saving.",
+      "tags": [
+        "engineering",
+        "direct",
+        "stubhubinc"
+      ],
+      "confidence": 0.72,
+      "createdAt": 1775632328041,
+      "lastUpdated": 1775632328041
+    },
+    {
+      "id": 7,
+      "url": "https://job-boards.greenhouse.io/gitlab/jobs/8452278002",
+      "company": "Gitlab",
+      "title": "Senior Fullstack Engineer (TypeScript), AI Engineering: Editor Extensions",
+      "location": "Remote, APAC; Remote, Canada; Remote, Ireland; Remote, Netherlands; Remote, United Kingdom; Remote, US-Southeast",
+      "salary": null,
+      "appliedDate": 1775632321257,
+      "status": "Applied",
+      "source": "job-boards.greenhouse.io",
+      "notes": "Imported from job-boards.greenhouse.io. Page metadata filled in more reliable job details; review the parsed fields before saving.",
+      "tags": [
+        "remote",
+        "senior",
+        "engineering",
+        "direct",
+        "gitlab"
+      ],
+      "confidence": 0.72,
+      "createdAt": 1775632321257,
+      "lastUpdated": 1775632321257
+    },
+    {
+      "id": 6,
+      "url": "https://abnormal.ai/careers/jobs/7593366003",
+      "company": "Abnormal",
+      "title": "Staff Software Engineer",
+      "location": "Location not listed",
+      "salary": null,
+      "appliedDate": 1775632312184,
+      "status": "Applied",
+      "source": "abnormal.ai",
+      "notes": "Imported from abnormal.ai. Page metadata filled in more reliable job details; review the parsed fields before saving.",
+      "tags": [
+        "senior",
+        "engineering",
+        "abnormal"
+      ],
+      "confidence": 0.72,
+      "createdAt": 1775632312184,
+      "lastUpdated": 1775632312184
+    },
+    {
+      "id": 5,
+      "url": "https://jobs.ashbyhq.com/vanta/1fb75eb1-739a-4394-9f9b-ca684a61dfd3",
+      "company": "Vanta",
+      "title": "Senior Software Engineer, AI Product",
+      "location": "USA",
+      "salary": "$207K - $244K",
+      "appliedDate": 1775632299691,
+      "status": "Applied",
+      "source": "jobs.ashbyhq.com",
+      "notes": "Imported from jobs.ashbyhq.com. Page metadata filled in more reliable job details; review the parsed fields before saving.",
+      "tags": [
+        "senior",
+        "product",
+        "engineering",
+        "direct",
+        "vanta"
+      ],
+      "confidence": 0.72,
+      "createdAt": 1775632299691,
+      "lastUpdated": 1775632299691
+    },
+    {
+      "id": 4,
+      "url": "https://jobs.ashbyhq.com/kraken.com/622b6edd-dd18-494f-bf52-13ac2b9ea521",
+      "company": "Kraken",
+      "title": "Senior Software Engineer",
+      "location": "United States",
+      "salary": "$110K - $221K",
+      "appliedDate": 1775606400000,
+      "status": "Applied",
+      "source": "jobs.ashbyhq.com",
+      "notes": "Imported from jobs.ashbyhq.com. Page metadata filled in more reliable job details; review the parsed fields before saving.",
+      "tags": [
+        "senior",
+        "engineering",
+        "direct",
+        "kraken"
+      ],
+      "confidence": 0.72,
+      "createdAt": 1775631746671,
+      "lastUpdated": 1775631746671
+    },
+    {
+      "id": 1,
+      "url": "https://jobs.lever.co/ridezum/d458798c-7ab9-4979-bd5c-f791787e11d4/",
+      "company": "Ridezum",
+      "title": "Software Engineer",
+      "location": "Location not listed",
+      "salary": null,
+      "appliedDate": 1775606400000,
+      "status": "Wishlist",
+      "source": "jobs.lever.co",
+      "notes": "Imported from jobs.lever.co. Review the parsed fields before saving.",
+      "tags": [
+        "direct",
+        "ridezum"
+      ],
+      "confidence": 0.81,
+      "createdAt": 1775630993556,
+      "lastUpdated": 1775631252695
+    },
+    {
+      "id": 2,
+      "url": "https://jobs.ashbyhq.com/beaconai/f0861ba2-2e48-4c49-819c-e585b4bb655c",
+      "company": "Beaconai",
+      "title": "Software Engineer",
+      "location": "Location not listed",
+      "salary": null,
+      "appliedDate": 1775606400000,
+      "status": "Wishlist",
+      "source": "jobs.ashbyhq.com",
+      "notes": "Imported from jobs.ashbyhq.com. Review the parsed fields before saving.",
+      "tags": [
+        "beaconai"
+      ],
+      "confidence": 0.81,
+      "createdAt": 1775631173629,
+      "lastUpdated": 1775631250764
+    }
+  ],
+  "settings": {
+    "xAiApiKey": "",
+    "xAiModel": "grok-4-fast-non-reasoning"
+  }
+}
