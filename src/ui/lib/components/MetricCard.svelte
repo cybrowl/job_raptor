@@ -52,16 +52,17 @@
     align-items: center;
     gap: 0.35rem;
     font-size: 12px;
-    font-weight: 500;
-    letter-spacing: -0.01em;
+    font-weight: 700;
+    letter-spacing: 1.17px;
+    text-transform: uppercase;
   }
 
   .metric-trend-up {
-    color: var(--metric-accent, var(--color-accent));
+    color: var(--color-text);
   }
 
   .metric-trend-down {
-    color: #ff9aa9;
+    color: var(--color-text-soft);
   }
 
   .metric-trend-flat {
@@ -81,10 +82,10 @@
 
   .metric-sparkline polyline {
     fill: none;
-    stroke: var(--metric-accent, var(--color-accent));
+    stroke: var(--color-text);
     stroke-linecap: round;
     stroke-linejoin: round;
-    stroke-width: 2.2;
-    opacity: 0.95;
+    stroke-width: 1.5;
+    opacity: 0.9;
   }
 </style>

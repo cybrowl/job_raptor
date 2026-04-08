@@ -78,10 +78,9 @@
   }
 
   .analytics-list {
-    border: 1px solid var(--color-border);
-    border-radius: 22px;
-    padding: 1rem;
-    background: rgba(240, 240, 250, 0.03);
+    border-top: 1px solid var(--color-line);
+    padding: 1rem 0 0;
+    background: transparent;
     display: grid;
     gap: 0.7rem;
   }
@@ -91,7 +90,7 @@
     justify-content: space-between;
     gap: 1rem;
     font-size: 12px;
-    line-height: 1.45;
+    line-height: 1.6;
     letter-spacing: 1.17px;
     text-transform: uppercase;
     color: var(--color-text-soft);

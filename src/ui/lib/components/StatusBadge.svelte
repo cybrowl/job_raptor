@@ -42,53 +42,45 @@
     height: 8px;
     border-radius: 999px;
     background: currentColor;
-    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
   }
 
   .status-default {
-    color: var(--color-text-soft);
-    border-color: rgba(240, 240, 250, 0.16);
+    color: var(--color-text);
   }
 
   .status-wishlist {
-    color: #b7bdd8;
-    border-color: rgba(183, 189, 216, 0.22);
-    background: rgba(183, 189, 216, 0.08);
+    color: rgba(240, 240, 250, 0.74);
+    border-color: rgba(240, 240, 250, 0.2);
+    background: rgba(240, 240, 250, 0.04);
   }
 
   .status-applied {
-    color: #7fb2ff;
-    border-color: rgba(127, 178, 255, 0.28);
-    background: rgba(127, 178, 255, 0.09);
+    color: var(--color-text);
   }
 
   .status-screen {
-    color: #ffcf70;
-    border-color: rgba(255, 207, 112, 0.28);
-    background: rgba(255, 207, 112, 0.08);
+    color: rgba(240, 240, 250, 0.92);
   }
 
   .status-interview {
-    color: #ff9a6c;
-    border-color: rgba(255, 154, 108, 0.28);
-    background: rgba(255, 154, 108, 0.08);
+    color: rgba(240, 240, 250, 0.92);
   }
 
   .status-offer {
-    color: #69d7a0;
-    border-color: rgba(105, 215, 160, 0.3);
-    background: rgba(105, 215, 160, 0.1);
+    color: var(--color-text);
+    border-color: var(--color-ghost-border);
+    background: rgba(240, 240, 250, 0.12);
   }
 
   .status-rejected {
-    color: #ff7f8f;
-    border-color: rgba(255, 127, 143, 0.28);
-    background: rgba(255, 127, 143, 0.08);
+    color: rgba(240, 240, 250, 0.74);
+    border-color: rgba(240, 240, 250, 0.2);
+    background: rgba(240, 240, 250, 0.04);
   }
 
   .status-archived {
-    color: #8b90a6;
-    border-color: rgba(139, 144, 166, 0.22);
-    background: rgba(139, 144, 166, 0.08);
+    color: rgba(240, 240, 250, 0.62);
+    border-color: rgba(240, 240, 250, 0.16);
+    background: transparent;
   }
 </style>

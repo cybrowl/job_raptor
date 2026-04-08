@@ -252,10 +252,9 @@
   }
 
   .kanban-column {
-    border: 1px solid var(--color-border);
-    border-radius: 22px;
-    padding: 1rem;
-    background: rgba(240, 240, 250, 0.03);
+    border-top: 1px solid var(--color-line);
+    padding: 1.2rem 0 0;
+    background: transparent;
     display: grid;
     gap: 1rem;
     align-content: start;
@@ -283,15 +282,14 @@
   }
 
   .kanban-column-active {
-    border-color: var(--color-accent-border);
-    background: linear-gradient(180deg, rgba(0, 240, 255, 0.08), rgba(240, 240, 250, 0.04));
+    border-color: var(--color-line-strong);
   }
 
   .kanban-item {
-    border: 1px solid var(--color-border);
-    border-radius: 18px;
+    border: 1px solid var(--color-ghost-border);
+    border-radius: 32px;
     padding: 0.9rem;
-    background: rgba(240, 240, 250, 0.02);
+    background: var(--color-ghost-bg);
     display: grid;
     gap: 0.85rem;
     cursor: grab;
@@ -304,8 +302,7 @@
   }
 
   .kanban-item:hover {
-    transform: translateY(-1px);
-    border-color: rgba(240, 240, 250, 0.22);
+    border-color: rgba(240, 240, 250, 0.5);
   }
 
   .kanban-item-header {
@@ -326,7 +323,7 @@
     width: 4px;
     height: 18px;
     border-radius: 999px;
-    background: rgba(240, 240, 250, 0.22);
+    background: rgba(240, 240, 250, 0.35);
   }
 
   .kanban-item-dragging {
@@ -340,8 +337,8 @@
     margin: 0;
     z-index: 90;
     pointer-events: none;
-    border-color: var(--color-border-strong);
-    background: rgba(0, 0, 0, 0.96);
+    border-color: var(--color-ghost-border);
+    background: rgba(0, 0, 0, 0.9);
   }
 
   .kanban-drag-layer {
@@ -352,10 +349,10 @@
   }
 
   .kanban-empty-card {
-    border: 1px dashed rgba(240, 240, 250, 0.2);
-    border-radius: 18px;
+    border: 1px dashed rgba(240, 240, 250, 0.22);
+    border-radius: 32px;
     padding: 1rem;
-    background: rgba(240, 240, 250, 0.015);
+    background: transparent;
     display: grid;
     gap: 0.35rem;
   }
@@ -363,17 +360,17 @@
   .table-title {
     margin: 0;
     font-size: 16px;
-    font-weight: 600;
-    letter-spacing: -0.02em;
-    text-transform: none;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
   }
 
   .table-copy {
     margin: 0;
-    font-size: 13px;
-    line-height: 1.5;
-    letter-spacing: -0.01em;
-    text-transform: none;
+    font-size: 12px;
+    line-height: 1.6;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
     color: var(--color-text-soft);
   }
 

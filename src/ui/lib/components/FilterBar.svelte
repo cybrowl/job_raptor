@@ -6,10 +6,10 @@
   <input
     bind:value
     class="mono-input"
-    placeholder="Try Remote Status:Applied Source:Lever Tag:Engineering"
+    placeholder="TRY REMOTE STATUS:APPLIED SOURCE:LEVER TAG:ENGINEERING"
   />
   <p class="micro">
-    Search company, role, notes, source, or tags. Use scoped tokens like
-    status:offer, source:linkedin, company:notion, or tag:remote.
+    SEARCH COMPANY, ROLE, NOTES, SOURCE, OR TAGS. USE TOKENS LIKE
+    STATUS:OFFER, SOURCE:LINKEDIN, COMPANY:NOTION, OR TAG:REMOTE.
   </p>
 </div>

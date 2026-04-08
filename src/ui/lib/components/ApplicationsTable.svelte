@@ -335,17 +335,17 @@
 
   .applications-table th,
   .applications-table td {
-    padding: 1rem 0.75rem;
+    padding: 1rem 0.5rem;
     vertical-align: top;
-    border-top: 1px solid var(--color-border);
+    border-top: 1px solid var(--color-line);
   }
 
   .applications-row {
-    transition: background-color 0.2s ease;
+    transition: opacity 0.2s ease;
   }
 
   .applications-row:hover {
-    background: rgba(240, 240, 250, 0.025);
+    opacity: 0.94;
   }
 
   .applications-table th {
@@ -384,8 +384,7 @@
   }
 
   .sort-icon-active {
-    color: var(--color-accent);
-    transform: translateY(-1px);
+    color: var(--color-text);
   }
 
   .table-link {
@@ -399,25 +398,25 @@
 
   .table-link:hover {
     opacity: 0.96;
-    color: rgba(224, 252, 255, 0.98);
+    color: var(--color-text);
   }
 
   .table-title {
     display: block;
     font-size: 16px;
-    font-weight: 600;
-    letter-spacing: -0.02em;
-    text-transform: none;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
   }
 
   .table-subtitle,
   .table-copy {
     display: block;
     margin-top: 0.3rem;
-    font-size: 13px;
-    line-height: 1.5;
-    letter-spacing: -0.01em;
-    text-transform: none;
+    font-size: 12px;
+    line-height: 1.6;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
     color: var(--color-text-soft);
   }
 
@@ -444,26 +443,26 @@
   }
 
   .confidence-pill-high {
-    border-color: rgba(105, 215, 160, 0.3);
-    background: rgba(105, 215, 160, 0.1);
-    color: #69d7a0;
+    border-color: var(--color-ghost-border);
+    background: var(--color-ghost-bg);
+    color: var(--color-text);
   }
 
   .confidence-pill-medium {
-    border-color: rgba(255, 207, 112, 0.3);
-    background: rgba(255, 207, 112, 0.1);
-    color: #ffcf70;
+    border-color: rgba(240, 240, 250, 0.26);
+    background: rgba(240, 240, 250, 0.08);
+    color: rgba(240, 240, 250, 0.92);
   }
 
   .confidence-pill-low {
-    border-color: rgba(255, 127, 143, 0.3);
-    background: rgba(255, 127, 143, 0.1);
-    color: #ff7f8f;
+    border-color: rgba(240, 240, 250, 0.18);
+    background: rgba(240, 240, 250, 0.04);
+    color: rgba(240, 240, 250, 0.76);
   }
 
   .confidence-pill-manual {
     border-color: rgba(240, 240, 250, 0.16);
-    background: rgba(240, 240, 250, 0.04);
+    background: transparent;
     color: var(--color-text-soft);
   }
 </style>

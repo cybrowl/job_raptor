@@ -4,7 +4,6 @@
   import AddJobModal from "$lib/components/AddJobModal.svelte";
   import AnalyticsPanel from "$lib/components/AnalyticsPanel.svelte";
   import ApplicationsTable from "$lib/components/ApplicationsTable.svelte";
-  import FilterBar from "$lib/components/FilterBar.svelte";
   import KanbanBoard from "$lib/components/KanbanBoard.svelte";
   import MetricCard from "$lib/components/MetricCard.svelte";
   import {
@@ -21,7 +20,6 @@
   import {
     buildRecentCountSeries,
     compareRecentPeriods,
-    filterApplications,
     formatPercent,
     isActiveStatus,
   } from "$lib/utils";
@@ -35,7 +33,6 @@
     body: string;
   }
 
-  let query = "";
   let showComposer = false;
   let editingApplication: JobApplication | null = null;
   let composerSeed: Partial<JobApplicationInput> | null = null;
@@ -68,7 +65,6 @@
     clearParseToastTimer();
   });
 
-  $: filteredApplications = filterApplications($applicationsStore.items, query);
   $: metrics = $applicationsStore.analytics;
   $: storageModeLabel = getStorageDriverLabel($applicationsStore.storage);
   $: recentCreatedSeries = toCumulative(
@@ -548,13 +544,13 @@
 
 <div class="app-shell">
   <div class="dashboard">
-    <section class="panel hero-panel">
+    <section class="panel hero-panel scene-hero">
       <div class="hero-grid">
         <div class="panel-grid hero-primary">
           <p class="eyebrow">Job Raptor Desktop</p>
           <h1 class="hero-heading">
             Paste A Job.
-            <span class="hero-accent">Catch It Fast.</span>
+            <span>Catch It Fast.</span>
           </h1>
           <p class="body">
             Drop in a careers link and Job Raptor will parse it, save it,
@@ -565,7 +561,7 @@
             <div class="field">
               <div class="meta-row">
                 <p class="field-label">Primary Capture</p>
-                <span class:meta-pill-accent={xAiApiKeyDraft.trim().length > 0} class="meta-pill">
+                <span class="meta-pill">
                   {quickParseProvider}
                 </span>
               </div>
@@ -577,7 +573,7 @@
                 />
                 <button
                   type="submit"
-                  class="ghost-button ghost-button-accent"
+                  class="ghost-button"
                   disabled={quickParseLoading}
                 >
                   {quickParseLoading ? "Adding Role" : "Add From Url"}
@@ -675,18 +671,7 @@
       </div>
     </section>
 
-    <div class:dashboard-grid-table={activeView === "table"} class="dashboard-grid">
-      <div class="content-stack">
-        <section class="panel">
-          <p class="eyebrow">Smart Filter</p>
-          <h2 class="title">Search The Pipeline Fast.</h2>
-          <FilterBar bind:value={query} />
-          <p class="micro">
-            Search feels best when you start with company, stage, or source and then narrow from there.
-          </p>
-        </section>
-      </div>
-
+    <div class="dashboard-grid scene-workspace">
       <div class="content-stack">
         <section class="panel workspace-switcher-panel">
           <div class="workspace-switcher-row">
@@ -733,7 +718,7 @@
 
         {#if activeView === "table"}
           <ApplicationsTable
-            applications={filteredApplications}
+            applications={$applicationsStore.items}
             busy={$applicationsStore.syncing || resyncingApplications}
             on:edit={handleEdit}
             on:remove={handleRemove}
@@ -742,7 +727,7 @@
           />
         {:else if activeView === "board"}
           <KanbanBoard
-            applications={filteredApplications}
+            applications={$applicationsStore.items}
             busy={$applicationsStore.syncing}
             on:edit={handleEdit}
             on:quickadd={handleQuickAdd}
