@@ -1,1 +1,1 @@
-{"default":{"identifier":"default","description":"Default capability set for the JobFlow desktop shell","local":true,"windows":["main"],"permissions":["core:default","sql:default","sql:allow-execute"]}}
+{"default":{"identifier":"default","description":"Default capability set for the Job Raptor desktop shell","local":true,"windows":["main"],"permissions":["core:default","sql:default","sql:allow-execute"]}}

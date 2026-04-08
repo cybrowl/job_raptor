@@ -3,18 +3,20 @@ import { getStorageDriver, type StorageDriver } from "$lib/runtime";
 import type { JobApplication, JobApplicationInput } from "$lib/types";
 import { sortApplicationsByRecent } from "$lib/utils";
 
-const DB_URL = "sqlite:jobflow.db";
-const BROWSER_STATE_KEY = "jobflow.browser-state.v1";
+const DB_URL = "sqlite:job-raptor.db";
+const BROWSER_STATE_KEY = "job-raptor.browser-state.v1";
 const XAI_KEY_SETTING = "xai_api_key";
 const XAI_MODEL_SETTING = "xai_model";
+const BACKUP_KIND = "job-raptor-backup";
+const LEGACY_BACKUP_KIND = "jobflow-backup";
 
 export interface LocalSettings {
   xAiApiKey: string;
   xAiModel: string;
 }
 
-export interface JobFlowBackup {
-  kind: "jobflow-backup";
+export interface JobRaptorBackup {
+  kind: typeof BACKUP_KIND;
   version: 1;
   exportedAt: string;
   storage: StorageDriver;
@@ -155,11 +157,14 @@ function normalizeApplication(raw: unknown): JobApplication {
   };
 }
 
-function parseBackup(raw: unknown): JobFlowBackup {
+function parseBackup(raw: unknown): JobRaptorBackup {
   const candidate = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
 
-  if (candidate.kind !== "jobflow-backup" || candidate.version !== 1) {
-    throw new Error("That backup file is not a supported JobFlow export.");
+  if (
+    (candidate.kind !== BACKUP_KIND && candidate.kind !== LEGACY_BACKUP_KIND) ||
+    candidate.version !== 1
+  ) {
+    throw new Error("That backup file is not a supported Job Raptor export.");
   }
 
   const applications = Array.isArray(candidate.applications)
@@ -167,7 +172,7 @@ function parseBackup(raw: unknown): JobFlowBackup {
     : [];
 
   return {
-    kind: "jobflow-backup",
+    kind: BACKUP_KIND,
     version: 1,
     exportedAt:
       typeof candidate.exportedAt === "string" ? candidate.exportedAt : new Date().toISOString(),
@@ -451,9 +456,9 @@ export async function saveLocalSettings(settings: LocalSettings) {
   writeBrowserState(state);
 }
 
-async function createBackupSnapshot(): Promise<JobFlowBackup> {
+async function createBackupSnapshot(): Promise<JobRaptorBackup> {
   return {
-    kind: "jobflow-backup",
+    kind: BACKUP_KIND,
     version: 1,
     exportedAt: new Date().toISOString(),
     storage: getStorageDriver(),
@@ -462,7 +467,7 @@ async function createBackupSnapshot(): Promise<JobFlowBackup> {
   };
 }
 
-async function replaceAllLocalData(backup: JobFlowBackup) {
+async function replaceAllLocalData(backup: JobRaptorBackup) {
   if (getStorageDriver() === "sqlite") {
     const db = await getDatabase();
 
@@ -543,7 +548,7 @@ async function replaceAllLocalData(backup: JobFlowBackup) {
 }
 
 function createBackupFilename() {
-  return `jobflow-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  return `job-raptor-backup-${new Date().toISOString().slice(0, 10)}.json`;
 }
 
 async function readBackupFromBrowserPicker() {

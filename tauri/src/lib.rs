@@ -347,14 +347,14 @@ async fn export_backup_file(
     let filename = suggested_filename
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| "jobflow-backup.json".to_string());
+        .unwrap_or_else(|| "job-raptor-backup.json".to_string());
 
     let selected = tauri::async_runtime::spawn_blocking(move || {
         app.dialog()
             .file()
-            .set_title("Export JobFlow Backup")
+            .set_title("Export Job Raptor Backup")
             .set_file_name(filename)
-            .add_filter("JobFlow Backup", &["json"])
+            .add_filter("Job Raptor Backup", &["json"])
             .blocking_save_file()
     })
     .await
@@ -380,8 +380,8 @@ async fn import_backup_file(app: AppHandle) -> Result<Option<String>, String> {
     let selected = tauri::async_runtime::spawn_blocking(move || {
         app.dialog()
             .file()
-            .set_title("Import JobFlow Backup")
-            .add_filter("JobFlow Backup", &["json"])
+            .set_title("Import Job Raptor Backup")
+            .add_filter("Job Raptor Backup", &["json"])
             .blocking_pick_file()
     })
     .await
@@ -440,7 +440,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(
             tauri_plugin_sql::Builder::default()
-                .add_migrations("sqlite:jobflow.db", migrations)
+                .add_migrations("sqlite:job-raptor.db", migrations)
                 .build(),
         )
         .invoke_handler(tauri::generate_handler![
@@ -449,5 +449,5 @@ pub fn run() {
             import_backup_file
         ])
         .run(tauri::generate_context!())
-        .expect("error while running JobFlow desktop shell");
+        .expect("error while running Job Raptor desktop shell");
 }

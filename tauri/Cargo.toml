@@ -1,12 +1,12 @@
 [package]
-name = "jobflow-desktop"
+name = "job-raptor-desktop"
 version = "0.1.0"
-description = "Desktop wrapper for the JobFlow dashboard"
-authors = ["JobFlow"]
+description = "Desktop wrapper for the Job Raptor dashboard"
+authors = ["Job Raptor"]
 edition = "2021"
 
 [lib]
-name = "jobflow_desktop_lib"
+name = "job_raptor_desktop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

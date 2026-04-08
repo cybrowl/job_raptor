@@ -339,7 +339,7 @@
 </script>
 
 <svelte:head>
-  <title>JobFlow</title>
+  <title>Job Raptor</title>
   <meta
     name="description"
     content="Track job applications with a local-first desktop dashboard, SQLite storage, and AI-assisted URL parsing."
@@ -351,7 +351,7 @@
     <section class="panel hero-panel">
       <div class="hero-grid">
         <div class="panel-grid hero-summary">
-          <p class="eyebrow">JobFlow Desktop</p>
+          <p class="eyebrow">Job Raptor Desktop</p>
           <h1 class="hero-heading">
             Track Everything.
             <span class="hero-accent">Move Faster.</span>

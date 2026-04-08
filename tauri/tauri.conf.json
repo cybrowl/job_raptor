@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "JobFlow",
+  "productName": "Job Raptor",
   "version": "0.1.0",
-  "identifier": "app.jobflow.desktop",
+  "identifier": "app.jobraptor.desktop",
   "build": {
     "beforeDevCommand": "npm run dev -- --host 127.0.0.1 --port 1420",
     "devUrl": "http://127.0.0.1:1420",
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "JobFlow",
+        "title": "Job Raptor",
         "width": 1440,
         "height": 960,
         "minWidth": 1120,
@@ -27,7 +27,7 @@
   },
   "plugins": {
     "sql": {
-      "preload": ["sqlite:jobflow.db"]
+      "preload": ["sqlite:job-raptor.db"]
     }
   },
   "bundle": {

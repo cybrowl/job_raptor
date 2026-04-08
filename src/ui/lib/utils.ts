@@ -168,7 +168,7 @@ export function computeInsight(
   responseRate: number
 ) {
   if (applications.length === 0) {
-    return "Add one role and JobFlow will start showing where your energy compounds fastest.";
+    return "Add one role and Job Raptor will start showing where your energy compounds fastest.";
   }
 
   if (staleCount > 0) {

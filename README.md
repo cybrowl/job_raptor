@@ -1,6 +1,6 @@
-# JobFlow
+# Job Raptor
 
-JobFlow is a local-first desktop job application dashboard: SvelteKit on the frontend, Tauri v2 for the native shell, SQLite for on-device persistence, and a local URL parser flow that can use your Grok/xAI key.
+Job Raptor is a local-first desktop job application dashboard: SvelteKit on the frontend, Tauri v2 for the native shell, SQLite for on-device persistence, and a local URL parser flow that can use your Grok/xAI key.
 
 ## Stack
 
