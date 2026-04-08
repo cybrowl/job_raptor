@@ -30,13 +30,41 @@
       <MetricCard
         eyebrow="This Week"
         value={String(metrics.appliedThisWeek)}
-        note="Applications Submitted Over Seven Days."
+        note="New Roles Captured Over The Last 7 Days."
       />
       <MetricCard
         eyebrow="Response"
         value={formatPercent(metrics.responseRate)}
         tone={metrics.responseRate >= 30 ? "positive" : metrics.responseRate > 0 ? "warning" : "danger"}
         note={`${metrics.staleCount} Stalled Role${metrics.staleCount === 1 ? "" : "s"} Flagged.`}
+      />
+    </div>
+
+    <div class="analytics-daily-head">
+      <p class="field-label">Daily Snapshot</p>
+      <p class="micro">A tighter read on what moved today and your current capture pace.</p>
+    </div>
+
+    <div class="metric-grid analytics-daily-grid">
+      <MetricCard
+        eyebrow="Today"
+        value={String(metrics.capturedToday)}
+        note="New Roles Captured Today."
+      />
+      <MetricCard
+        eyebrow="Touched"
+        value={String(metrics.touchedToday)}
+        note="Roles Updated Or Advanced Today."
+      />
+      <MetricCard
+        eyebrow="Replies"
+        value={String(metrics.repliesToday)}
+        note="Conversations That Moved Today."
+      />
+      <MetricCard
+        eyebrow="Daily Pace"
+        value={`${metrics.dailyCaptureRate.toFixed(1)}/Day`}
+        note="Average New Roles Captured Per Day This Week."
       />
     </div>
 
@@ -71,6 +99,15 @@
 </section>
 
 <style lang="postcss">
+  .analytics-daily-head {
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .analytics-daily-grid {
+    margin-top: -0.25rem;
+  }
+
   .analytics-grid {
     display: grid;
     gap: 1rem;

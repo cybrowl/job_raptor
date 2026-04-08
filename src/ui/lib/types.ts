@@ -49,6 +49,10 @@ export interface DashboardMetrics {
   totalApplications: number;
   activePipeline: number;
   appliedThisWeek: number;
+  capturedToday: number;
+  touchedToday: number;
+  repliesToday: number;
+  dailyCaptureRate: number;
   responseRate: number;
   staleCount: number;
   stageBreakdown: CountBucket[];

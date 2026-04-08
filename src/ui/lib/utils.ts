@@ -192,11 +192,26 @@ export function computeInsight(
 
 export function computeDashboardMetrics(applications: JobApplication[]): DashboardMetrics {
   const now = Date.now();
+  const today = clampToDay(now);
+  const tomorrow = today + DAY_MS;
   const activePipeline = applications.filter((application) =>
     isActiveStatus(application.status)
   ).length;
   const appliedThisWeek = applications.filter(
-    (application) => now - application.appliedDate <= DAY_MS * 7
+    (application) => now - application.createdAt <= DAY_MS * 7
+  ).length;
+  const capturedToday = applications.filter(
+    (application) => application.createdAt >= today && application.createdAt < tomorrow
+  ).length;
+  const touchedToday = applications.filter(
+    (application) => application.lastUpdated >= today && application.lastUpdated < tomorrow
+  ).length;
+  const repliesToday = applications.filter(
+    (application) =>
+      application.lastUpdated >= today &&
+      application.lastUpdated < tomorrow &&
+      application.status !== "Wishlist" &&
+      application.status !== "Applied"
   ).length;
   const responded = applications.filter(
     (application) =>
@@ -211,11 +226,20 @@ export function computeDashboardMetrics(applications: JobApplication[]): Dashboa
   ).length;
   const stageBreakdown = buildStageBreakdown(applications);
   const sourceBreakdown = buildSourceBreakdown(applications);
+  const dailyCaptureRate =
+    buildRecentCountSeries(applications, (application) => application.createdAt).reduce(
+      (sum, count) => sum + count,
+      0
+    ) / 7;
 
   return {
     totalApplications: applications.length,
     activePipeline,
     appliedThisWeek,
+    capturedToday,
+    touchedToday,
+    repliesToday,
+    dailyCaptureRate,
     responseRate,
     staleCount,
     stageBreakdown,

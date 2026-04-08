@@ -74,9 +74,9 @@
     (application) => application.lastUpdated,
     (application) => isActiveStatus(application.status)
   );
-  $: recentAppliedSeries = buildRecentCountSeries(
+  $: recentAddedSeries = buildRecentCountSeries(
     $applicationsStore.items,
-    (application) => application.appliedDate
+    (application) => application.createdAt
   );
   $: recentResponseSeries = buildRecentCountSeries(
     $applicationsStore.items,
@@ -96,9 +96,9 @@
     ),
     "active touches this week"
   );
-  $: appliedTrend = buildTrend(
-    compareRecentPeriods($applicationsStore.items, (application) => application.appliedDate),
-    "applications this week"
+  $: addedTrend = buildTrend(
+    compareRecentPeriods($applicationsStore.items, (application) => application.createdAt),
+    "roles captured this week"
   );
   $: responseTrend = buildTrend(
     compareRecentPeriods(
@@ -259,7 +259,7 @@
         location: payload.location?.trim() || "Location Not Listed",
         salary: payload.salary?.trim() ? payload.salary.trim() : null,
         appliedDate: Date.now(),
-        status: payload.status?.trim() || "Applied",
+        status: "Wishlist",
         source: payload.source?.trim() || "url parse",
         notes: payload.notes?.trim() || "Imported from URL parser.",
         tags: payload.tags ?? [],
@@ -637,10 +637,10 @@
         <MetricCard
           eyebrow="This Week"
           value={String(metrics.appliedThisWeek)}
-          trend={appliedTrend.label}
-          trendDirection={appliedTrend.direction}
-          sparkline={recentAppliedSeries}
-          note="Fresh Applications Added In The Last 7 Days."
+          trend={addedTrend.label}
+          trendDirection={addedTrend.direction}
+          sparkline={recentAddedSeries}
+          note="Fresh Roles Captured In The Last 7 Days."
         />
         <MetricCard
           eyebrow="Response"
