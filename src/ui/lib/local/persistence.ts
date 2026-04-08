@@ -61,7 +61,17 @@ interface PickedBackupFile {
   name: string;
 }
 
-let dbPromise: Promise<Database> | null = null;
+declare global {
+  var __jobRaptorDbPromise: Promise<Database> | undefined;
+  var __jobRaptorSqliteQueue: Promise<void> | undefined;
+}
+
+function getGlobalPersistenceState() {
+  return globalThis as typeof globalThis & {
+    __jobRaptorDbPromise?: Promise<Database>;
+    __jobRaptorSqliteQueue?: Promise<void>;
+  };
+}
 
 function createEmptyResumeProfile(): ResumeProfile {
   return {
@@ -287,12 +297,73 @@ async function getDatabase() {
     throw new Error("SQLite is only available inside the Tauri desktop shell.");
   }
 
-  dbPromise ??= (async () => {
+  const globalState = getGlobalPersistenceState();
+
+  globalState.__jobRaptorDbPromise ??= (async () => {
     const db = await Database.load(DB_URL);
+    await configureDatabase(db);
     await ensureApplicationColumns(db);
     return db;
   })();
-  return dbPromise;
+
+  return globalState.__jobRaptorDbPromise;
+}
+
+async function configureDatabase(db: Database) {
+  await db.execute("PRAGMA journal_mode = WAL");
+  await db.execute("PRAGMA busy_timeout = 5000");
+  await db.execute("PRAGMA synchronous = NORMAL");
+}
+
+function isLockedDatabaseError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /database is locked/i.test(message) || /\(code:\s*5\)/i.test(message);
+}
+
+async function sleep(ms: number) {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function retryLockedDatabaseOperation<T>(
+  operation: () => Promise<T>,
+  attempts = 4
+): Promise<T> {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+
+      if (!isLockedDatabaseError(error) || attempt === attempts - 1) {
+        throw error;
+      }
+
+      await sleep(120 * (attempt + 1));
+    }
+  }
+
+  throw lastError;
+}
+
+async function runSqliteTask<T>(task: (db: Database) => Promise<T>) {
+  const globalState = getGlobalPersistenceState();
+  const previous = globalState.__jobRaptorSqliteQueue ?? Promise.resolve();
+
+  let release!: () => void;
+  globalState.__jobRaptorSqliteQueue = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+
+  await previous;
+
+  try {
+    const db = await getDatabase();
+    return await retryLockedDatabaseOperation(() => task(db));
+  } finally {
+    release();
+  }
 }
 
 async function ensureApplicationColumns(db: Database) {
@@ -325,45 +396,10 @@ export function getPersistenceDriver(): StorageDriver {
 
 export async function listApplications() {
   if (getStorageDriver() === "sqlite") {
-    const db = await getDatabase();
-    const rows = await db.select<ApplicationRow[]>(
-      `SELECT
-        id,
-        url,
-        company,
-        title,
-        location,
-        salary,
-        applied_date,
-        status,
-        source,
-        notes,
-        tags,
-        confidence,
-        parse_confidence,
-        fit_summary,
-        job_description,
-        created_at,
-        last_updated
-      FROM applications
-      ORDER BY last_updated DESC, id DESC`
-    );
-
-    return rows.map(fromRow);
-  }
-
-  return sortApplicationsByRecent(readBrowserState().applications.map(normalizeApplication));
-}
-
-export async function saveApplication(id: number | null, input: JobApplicationInput) {
-  const now = Date.now();
-
-  if (getStorageDriver() === "sqlite") {
-    const db = await getDatabase();
-
-    if (id === null) {
-      await db.execute(
-        `INSERT INTO applications (
+    const rows = await runSqliteTask((db) =>
+      db.select<ApplicationRow[]>(
+        `SELECT
+          id,
           url,
           company,
           title,
@@ -380,7 +416,83 @@ export async function saveApplication(id: number | null, input: JobApplicationIn
           job_description,
           created_at,
           last_updated
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        FROM applications
+        ORDER BY last_updated DESC, id DESC`
+      )
+    );
+
+    return rows.map(fromRow);
+  }
+
+  return sortApplicationsByRecent(readBrowserState().applications.map(normalizeApplication));
+}
+
+export async function saveApplication(id: number | null, input: JobApplicationInput) {
+  const now = Date.now();
+
+  if (getStorageDriver() === "sqlite") {
+    await runSqliteTask(async (db) => {
+      if (id === null) {
+        await db.execute(
+          `INSERT INTO applications (
+            url,
+            company,
+            title,
+            location,
+            salary,
+            applied_date,
+            status,
+            source,
+            notes,
+            tags,
+            confidence,
+            parse_confidence,
+            fit_summary,
+            job_description,
+            created_at,
+            last_updated
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            input.url,
+            input.company,
+            input.title,
+            input.location,
+            input.salary,
+            input.appliedDate,
+            input.status,
+            input.source,
+            input.notes,
+            JSON.stringify(input.tags),
+            input.confidence,
+            input.parseConfidence,
+            input.fitSummary,
+            input.jobDescription,
+            now,
+            now,
+          ]
+        );
+        return;
+      }
+
+      await db.execute(
+        `UPDATE applications
+        SET
+          url = ?,
+          company = ?,
+          title = ?,
+          location = ?,
+          salary = ?,
+          applied_date = ?,
+          status = ?,
+          source = ?,
+          notes = ?,
+          tags = ?,
+          confidence = ?,
+          parse_confidence = ?,
+          fit_summary = ?,
+          job_description = ?,
+          last_updated = ?
+        WHERE id = ?`,
         [
           input.url,
           input.company,
@@ -397,50 +509,10 @@ export async function saveApplication(id: number | null, input: JobApplicationIn
           input.fitSummary,
           input.jobDescription,
           now,
-          now,
+          id,
         ]
       );
-      return;
-    }
-
-    await db.execute(
-      `UPDATE applications
-      SET
-        url = ?,
-        company = ?,
-        title = ?,
-        location = ?,
-        salary = ?,
-        applied_date = ?,
-        status = ?,
-        source = ?,
-        notes = ?,
-        tags = ?,
-        confidence = ?,
-        parse_confidence = ?,
-        fit_summary = ?,
-        job_description = ?,
-        last_updated = ?
-      WHERE id = ?`,
-      [
-        input.url,
-        input.company,
-        input.title,
-        input.location,
-        input.salary,
-        input.appliedDate,
-        input.status,
-        input.source,
-        input.notes,
-        JSON.stringify(input.tags),
-        input.confidence,
-        input.parseConfidence,
-        input.fitSummary,
-        input.jobDescription,
-        now,
-        id,
-      ]
-    );
+    });
     return;
   }
 
@@ -477,12 +549,13 @@ export async function updateApplicationStatus(id: number, status: string) {
   const now = Date.now();
 
   if (getStorageDriver() === "sqlite") {
-    const db = await getDatabase();
-    await db.execute(
-      `UPDATE applications
-      SET status = ?, last_updated = ?
-      WHERE id = ?`,
-      [status, now, id]
+    await runSqliteTask((db) =>
+      db.execute(
+        `UPDATE applications
+        SET status = ?, last_updated = ?
+        WHERE id = ?`,
+        [status, now, id]
+      )
     );
     return;
   }
@@ -502,8 +575,7 @@ export async function updateApplicationStatus(id: number, status: string) {
 
 export async function deleteApplication(id: number) {
   if (getStorageDriver() === "sqlite") {
-    const db = await getDatabase();
-    await db.execute("DELETE FROM applications WHERE id = ?", [id]);
+    await runSqliteTask((db) => db.execute("DELETE FROM applications WHERE id = ?", [id]));
     return;
   }
 
@@ -514,10 +586,11 @@ export async function deleteApplication(id: number) {
 
 export async function loadLocalSettings(): Promise<LocalSettings> {
   if (getStorageDriver() === "sqlite") {
-    const db = await getDatabase();
-    const rows = await db.select<Array<{ key: string; value: string }>>(
-      "SELECT key, value FROM settings WHERE key IN (?, ?, ?)",
-      [XAI_KEY_SETTING, XAI_MODEL_SETTING, RESUME_PROFILE_SETTING]
+    const rows = await runSqliteTask((db) =>
+      db.select<Array<{ key: string; value: string }>>(
+        "SELECT key, value FROM settings WHERE key IN (?, ?, ?)",
+        [XAI_KEY_SETTING, XAI_MODEL_SETTING, RESUME_PROFILE_SETTING]
+      )
     );
     const entries = new Map(rows.map((row) => [row.key, row.value]));
     const storedResume = entries.get(RESUME_PROFILE_SETTING);
@@ -547,37 +620,37 @@ export async function saveLocalSettings(settings: LocalSettings) {
   const normalizedResumeProfile = normalizeResumeProfile(settings.resumeProfile);
 
   if (getStorageDriver() === "sqlite") {
-    const db = await getDatabase();
-
-    await db.execute(
-      `INSERT INTO settings (key, value)
-      VALUES (?, ?)
-      ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
-      [XAI_MODEL_SETTING, normalizedModel]
-    );
-
-    if (normalizedResumeProfile.rawText) {
+    await runSqliteTask(async (db) => {
       await db.execute(
         `INSERT INTO settings (key, value)
         VALUES (?, ?)
         ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
-        [RESUME_PROFILE_SETTING, JSON.stringify(normalizedResumeProfile)]
+        [XAI_MODEL_SETTING, normalizedModel]
       );
-    } else {
-      await db.execute("DELETE FROM settings WHERE key = ?", [RESUME_PROFILE_SETTING]);
-    }
 
-    if (!normalizedKey) {
-      await db.execute("DELETE FROM settings WHERE key = ?", [XAI_KEY_SETTING]);
-      return;
-    }
+      if (normalizedResumeProfile.rawText) {
+        await db.execute(
+          `INSERT INTO settings (key, value)
+          VALUES (?, ?)
+          ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+          [RESUME_PROFILE_SETTING, JSON.stringify(normalizedResumeProfile)]
+        );
+      } else {
+        await db.execute("DELETE FROM settings WHERE key = ?", [RESUME_PROFILE_SETTING]);
+      }
 
-    await db.execute(
-      `INSERT INTO settings (key, value)
-      VALUES (?, ?)
-      ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
-      [XAI_KEY_SETTING, normalizedKey]
-    );
+      if (!normalizedKey) {
+        await db.execute("DELETE FROM settings WHERE key = ?", [XAI_KEY_SETTING]);
+        return;
+      }
+
+      await db.execute(
+        `INSERT INTO settings (key, value)
+        VALUES (?, ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+        [XAI_KEY_SETTING, normalizedKey]
+      );
+    });
     return;
   }
 
@@ -601,88 +674,88 @@ async function createBackupSnapshot(): Promise<JobRaptorBackup> {
 
 async function replaceAllLocalData(backup: JobRaptorBackup) {
   if (getStorageDriver() === "sqlite") {
-    const db = await getDatabase();
+    await runSqliteTask(async (db) => {
+      await db.execute("BEGIN TRANSACTION");
 
-    await db.execute("BEGIN TRANSACTION");
+      try {
+        await db.execute("DELETE FROM applications");
+        await db.execute("DELETE FROM settings");
+        await db.execute("DELETE FROM sqlite_sequence WHERE name = 'applications'");
 
-    try {
-      await db.execute("DELETE FROM applications");
-      await db.execute("DELETE FROM settings");
-      await db.execute("DELETE FROM sqlite_sequence WHERE name = 'applications'");
+        for (const application of backup.applications) {
+          await db.execute(
+            `INSERT INTO applications (
+              id,
+              url,
+              company,
+              title,
+              location,
+              salary,
+              applied_date,
+              status,
+              source,
+              notes,
+              tags,
+              confidence,
+              parse_confidence,
+              fit_summary,
+              job_description,
+              created_at,
+              last_updated
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+              application.id,
+              application.url,
+              application.company,
+              application.title,
+              application.location,
+              application.salary,
+              application.appliedDate,
+              application.status,
+              application.source,
+              application.notes,
+              JSON.stringify(application.tags),
+              application.confidence,
+              application.parseConfidence,
+              application.fitSummary,
+              application.jobDescription,
+              application.createdAt,
+              application.lastUpdated,
+            ]
+          );
+        }
 
-      for (const application of backup.applications) {
-        await db.execute(
-          `INSERT INTO applications (
-            id,
-            url,
-            company,
-            title,
-            location,
-            salary,
-            applied_date,
-            status,
-            source,
-            notes,
-            tags,
-            confidence,
-            parse_confidence,
-            fit_summary,
-            job_description,
-            created_at,
-            last_updated
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            application.id,
-            application.url,
-            application.company,
-            application.title,
-            application.location,
-            application.salary,
-            application.appliedDate,
-            application.status,
-            application.source,
-            application.notes,
-            JSON.stringify(application.tags),
-            application.confidence,
-            application.parseConfidence,
-            application.fitSummary,
-            application.jobDescription,
-            application.createdAt,
-            application.lastUpdated,
-          ]
-        );
-      }
-
-      await db.execute(
-        `INSERT INTO settings (key, value)
-        VALUES (?, ?)
-        ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
-        [XAI_MODEL_SETTING, backup.settings.xAiModel.trim() || "grok-4-fast-non-reasoning"]
-      );
-
-      if (backup.settings.xAiApiKey.trim()) {
         await db.execute(
           `INSERT INTO settings (key, value)
           VALUES (?, ?)
           ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
-          [XAI_KEY_SETTING, backup.settings.xAiApiKey.trim()]
+          [XAI_MODEL_SETTING, backup.settings.xAiModel.trim() || "grok-4-fast-non-reasoning"]
         );
-      }
 
-      if (backup.settings.resumeProfile.rawText.trim()) {
-        await db.execute(
-          `INSERT INTO settings (key, value)
-          VALUES (?, ?)
-          ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
-          [RESUME_PROFILE_SETTING, JSON.stringify(normalizeResumeProfile(backup.settings.resumeProfile))]
-        );
-      }
+        if (backup.settings.xAiApiKey.trim()) {
+          await db.execute(
+            `INSERT INTO settings (key, value)
+            VALUES (?, ?)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+            [XAI_KEY_SETTING, backup.settings.xAiApiKey.trim()]
+          );
+        }
 
-      await db.execute("COMMIT");
-    } catch (error) {
-      await db.execute("ROLLBACK");
-      throw error;
-    }
+        if (backup.settings.resumeProfile.rawText.trim()) {
+          await db.execute(
+            `INSERT INTO settings (key, value)
+            VALUES (?, ?)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+            [RESUME_PROFILE_SETTING, JSON.stringify(normalizeResumeProfile(backup.settings.resumeProfile))]
+          );
+        }
+
+        await db.execute("COMMIT");
+      } catch (error) {
+        await db.execute("ROLLBACK");
+        throw error;
+      }
+    });
 
     return;
   }
