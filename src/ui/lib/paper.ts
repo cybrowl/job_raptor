@@ -640,7 +640,7 @@ interface LayoutTypography {
 
 function buildTypography(scale: number): LayoutTypography {
   return {
-    name: { size: 24 * scale, lineHeight: 28 * scale, weight: 700 },
+    name: { size: 18 * scale, lineHeight: 21 * scale, weight: 700 },
     contact: { size: 9.5 * scale, lineHeight: 12 * scale, weight: 400 },
     section: { size: 11.5 * scale, lineHeight: 14 * scale, weight: 700 },
     body: { size: 10.1 * scale, lineHeight: 13.2 * scale, weight: 400 },
