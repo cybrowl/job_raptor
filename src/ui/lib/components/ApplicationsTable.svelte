@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher } from "svelte";
+  import { isTauriRuntime } from "$lib/runtime";
   import { PIPELINE_STAGES, type JobApplication } from "$lib/types";
   import { formatDate, formatRelativeTime } from "$lib/utils";
   import StatusBadge from "$lib/components/StatusBadge.svelte";
@@ -140,6 +141,34 @@
 
     return sortDirection === "asc" ? "ascending" : "descending";
   }
+
+  async function openApplicationUrl(application: JobApplication) {
+    const url = application.url.trim();
+
+    if (!url) {
+      dispatch("edit", application);
+      return;
+    }
+
+    try {
+      new URL(url);
+    } catch (error) {
+      dispatch("edit", application);
+      return;
+    }
+
+    if (isTauriRuntime()) {
+      const { invoke } = await import("@tauri-apps/api/core");
+      await invoke("open_external_url", { url });
+      return;
+    }
+
+    const opened = window.open(url, "_blank", "noopener,noreferrer");
+
+    if (!opened) {
+      window.location.href = url;
+    }
+  }
 </script>
 
 <section class="panel">
@@ -238,7 +267,8 @@
                 <button
                   type="button"
                   class="table-link"
-                  on:click={() => dispatch("edit", application)}
+                  title="Open job posting"
+                  on:click={() => openApplicationUrl(application)}
                 >
                   <span class="table-title">{application.title}</span>
                   <span class="table-subtitle">

@@ -1,4 +1,5 @@
 use std::fs;
+use std::process::Command;
 
 use regex::Regex;
 use reqwest::header::{ACCEPT, CONTENT_TYPE, USER_AGENT};
@@ -918,6 +919,40 @@ async fn import_backup_file(app: AppHandle) -> Result<Option<ImportedBackupFile>
     }))
 }
 
+#[tauri::command]
+async fn open_external_url(url: String) -> Result<(), String> {
+    let parsed = url::Url::parse(url.trim()).map_err(|_| "Enter a valid job URL.".to_string())?;
+
+    match parsed.scheme() {
+        "http" | "https" => {}
+        _ => return Err("Only HTTP and HTTPS job links can be opened.".to_string()),
+    }
+
+    let target = parsed.to_string();
+
+    tauri::async_runtime::spawn_blocking(move || {
+        #[cfg(target_os = "macos")]
+        {
+            Command::new("open").arg(&target).spawn()
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            Command::new("cmd").args(["/C", "start", "", &target]).spawn()
+        }
+
+        #[cfg(all(unix, not(target_os = "macos")))]
+        {
+            Command::new("xdg-open").arg(&target).spawn()
+        }
+    })
+    .await
+    .map_err(|error| error.to_string())?
+    .map_err(|error| error.to_string())?;
+
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let migrations = vec![
@@ -972,7 +1007,8 @@ ALTER TABLE applications ADD COLUMN job_description TEXT NOT NULL DEFAULT '';",
             parse_job_url,
             export_backup_file,
             export_paper_pdf,
-            import_backup_file
+            import_backup_file,
+            open_external_url
         ])
         .run(tauri::generate_context!())
         .expect("error while running Job Raptor desktop shell");
