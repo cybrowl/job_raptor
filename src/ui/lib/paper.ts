@@ -24,6 +24,7 @@ interface ExperienceEntry {
 
 interface ResumeHeader {
   name: string;
+  nameWeight: FontWeight;
   contactLines: string[];
 }
 
@@ -132,6 +133,10 @@ function stripMarkdownInline(text: string) {
     .replace(/\\([#*_`[\]()])/g, "$1")
     .replace(/\s{2,}$/g, "")
     .trim();
+}
+
+function hasMarkdownStrongEmphasis(line: string) {
+  return /^\s*(\*\*|__)(.+?)\1\s*$/.test(line.trim());
 }
 
 function getMarkdownHeading(line: string) {
@@ -330,6 +335,7 @@ function parseMarkdownResume(normalized: string): ParsedResumeDocument {
   const lines = normalized.split("\n");
   const sections: ResumeSection[] = [];
   let headerName = "Your Name";
+  let headerNameWeight: FontWeight = 400;
   const contactLines: string[] = [];
   let index = 0;
 
@@ -341,9 +347,11 @@ function parseMarkdownResume(normalized: string): ParsedResumeDocument {
 
   if (firstHeading?.level === 1) {
     headerName = firstHeading.title;
+    headerNameWeight = 700;
     index += 1;
   } else if (index < lines.length) {
     headerName = stripMarkdownInline(lines[index]);
+    headerNameWeight = hasMarkdownStrongEmphasis(lines[index]) ? 700 : 400;
     index += 1;
   }
 
@@ -433,6 +441,7 @@ function parseMarkdownResume(normalized: string): ParsedResumeDocument {
   return {
     header: {
       name: headerName,
+      nameWeight: headerNameWeight,
       contactLines,
     },
     sections,
@@ -535,6 +544,7 @@ export function parsePaperResume(rawText: string): ParsedResumeDocument {
     return {
       header: {
         name: "Your Name",
+        nameWeight: 400,
         contactLines: ["Email • Phone • Portfolio"],
       },
       sections: [],
@@ -550,6 +560,7 @@ export function parsePaperResume(rawText: string): ParsedResumeDocument {
     const headerBlock = blocks[0] ?? [];
     const header: ResumeHeader = {
       name: cleanTextLine(headerBlock[0] ?? "Your Name"),
+      nameWeight: 400,
       contactLines: headerBlock.slice(1).map(cleanTextLine).filter(Boolean),
     };
     const paragraphs = blocks
@@ -578,6 +589,7 @@ export function parsePaperResume(rawText: string): ParsedResumeDocument {
     .filter(Boolean);
   const header: ResumeHeader = {
     name: headerLines[0] ?? "Your Name",
+    nameWeight: 400,
     contactLines: headerLines.slice(1),
   };
   const sections: ResumeSection[] = [];
@@ -653,6 +665,17 @@ async function buildLayoutAtScale(
 ): Promise<PaperLayoutResult> {
   const { prepareWithSegments, layoutWithLines, measureNaturalWidth } = pretext;
   const typography = buildTypography(scale);
+  const isLetterDocument =
+    document.sections.length > 0 && document.sections.every((section) => section.kind === "letter");
+  const headerNameStyle = isLetterDocument
+    ? {
+        size: typography.body.size,
+        lineHeight: typography.body.lineHeight,
+      }
+    : {
+        size: typography.name.size,
+        lineHeight: typography.name.lineHeight,
+      };
   const contentWidth = PAPER_PAGE_WIDTH - PAPER_PADDING.left - PAPER_PADDING.right;
   const availableHeight = PAPER_PAGE_HEIGHT - PAPER_PADDING.top - PAPER_PADDING.bottom;
   const lines: PaperPreviewLine[] = [];
@@ -725,9 +748,9 @@ async function buildLayoutAtScale(
   pushWrapped(document.header.name, {
     x: PAPER_PADDING.left,
     width: contentWidth,
-    fontSize: typography.name.size,
-    fontWeight: typography.name.weight,
-    lineHeight: typography.name.lineHeight,
+    fontSize: headerNameStyle.size,
+    fontWeight: document.header.nameWeight,
+    lineHeight: headerNameStyle.lineHeight,
   });
 
   if (document.header.contactLines.length > 0) {

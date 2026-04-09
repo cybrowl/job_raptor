@@ -117,6 +117,7 @@ describe("parsePaperResume", () => {
     const parsed = parsePaperResume(MARKDOWN_RESUME);
 
     expect(parsed.header.name).toBe("Jefri Vanegas");
+    expect(parsed.header.nameWeight).toBe(700);
     expect(parsed.header.contactLines).toEqual([
       "(213) 822-4331 | vjefri@gmail.com",
       "GitHub: github.com/cybrowl | LinkedIn: linkedin.com/in/vjefri",
@@ -153,6 +154,7 @@ describe("parsePaperResume", () => {
     const parsed = parsePaperResume(COVER_LETTER);
 
     expect(parsed.header.name).toBe("Jefri Vanegas");
+    expect(parsed.header.nameWeight).toBe(400);
     expect(parsed.header.contactLines).toEqual([
       "Los Angeles, CA | (213) 822-4331 | vjefri@gmail.com",
       "March 22, 2026",
