@@ -12,7 +12,7 @@ const PAPER_BODY_COLOR = "#111111";
 const MIN_LAYOUT_SCALE = 0.74;
 const SCALE_STEP = 0.02;
 
-type SectionKind = "summary" | "skills" | "experience" | "education" | "generic";
+type SectionKind = "summary" | "skills" | "experience" | "education" | "generic" | "letter";
 type FontWeight = 400 | 700;
 
 interface ExperienceEntry {
@@ -57,12 +57,18 @@ interface ResumeGenericSection extends ResumeSectionBase {
   lines: string[];
 }
 
+interface ResumeLetterSection extends ResumeSectionBase {
+  kind: "letter";
+  paragraphs: string[];
+}
+
 type ResumeSection =
   | ResumeSummarySection
   | ResumeSkillsSection
   | ResumeExperienceSection
   | ResumeEducationSection
-  | ResumeGenericSection;
+  | ResumeGenericSection
+  | ResumeLetterSection;
 
 interface ParsedResumeDocument {
   header: ResumeHeader;
@@ -143,6 +149,20 @@ function getMarkdownHeading(line: string) {
 
 function looksLikeMarkdownResume(normalized: string) {
   return /(^|\n)#{1,3}\s+\S/.test(normalized);
+}
+
+function looksLikeCoverLetter(normalized: string) {
+  const trimmed = normalized.trim();
+
+  if (!trimmed) {
+    return false;
+  }
+
+  return (
+    /(^|\n)\s*dear\b/i.test(trimmed) ||
+    /(^|\n)\s*(best regards|regards|sincerely|thank you),?\s*$/im.test(trimmed) ||
+    /(^|\n)\s*[A-Z][a-z]+ \d{1,2}, \d{4}\s*$/m.test(trimmed)
+  );
 }
 
 function isSectionHeading(line: string) {
@@ -525,6 +545,32 @@ export function parsePaperResume(rawText: string): ParsedResumeDocument {
     return parseMarkdownResume(normalized);
   }
 
+  if (looksLikeCoverLetter(normalized)) {
+    const blocks = splitBlocks(normalized.split("\n"));
+    const headerBlock = blocks[0] ?? [];
+    const header: ResumeHeader = {
+      name: cleanTextLine(headerBlock[0] ?? "Your Name"),
+      contactLines: headerBlock.slice(1).map(cleanTextLine).filter(Boolean),
+    };
+    const paragraphs = blocks
+      .slice(1)
+      .map((block) => block.map(cleanTextLine).filter(Boolean).join(" "))
+      .filter(Boolean);
+
+    return {
+      header,
+      sections: paragraphs.length
+        ? [
+            {
+              title: "",
+              kind: "letter",
+              paragraphs,
+            },
+          ]
+        : [],
+    };
+  }
+
   const lines = normalized.split("\n");
   const firstHeadingIndex = lines.findIndex((line) => isSectionHeading(line));
   const headerLines = (firstHeadingIndex === -1 ? lines : lines.slice(0, firstHeadingIndex))
@@ -700,16 +746,18 @@ async function buildLayoutAtScale(
   cursorY += 10 * scale;
 
   for (const section of document.sections) {
-    pushWrapped(section.title, {
-      x: PAPER_PADDING.left,
-      width: contentWidth,
-      fontSize: typography.section.size,
-      fontWeight: typography.section.weight,
-      lineHeight: typography.section.lineHeight,
-    });
-    cursorY += 4 * scale;
+    if (section.title.trim()) {
+      pushWrapped(section.title, {
+        x: PAPER_PADDING.left,
+        width: contentWidth,
+        fontSize: typography.section.size,
+        fontWeight: typography.section.weight,
+        lineHeight: typography.section.lineHeight,
+      });
+      cursorY += 4 * scale;
+    }
 
-    if (section.kind === "summary") {
+    if (section.kind === "summary" || section.kind === "letter") {
       for (const paragraph of section.paragraphs) {
         pushWrapped(paragraph, {
           x: PAPER_PADDING.left,

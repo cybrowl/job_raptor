@@ -382,7 +382,12 @@
       xAiModelDraft = settings.xAiModel;
       resumeProfile = settings.resumeProfile;
       resumeTextDraft = settings.resumeProfile.rawText;
-      paperDraftText = settings.paperDraftText || settings.resumeProfile.rawText;
+      const persistedPaperDraft = settings.paperDraftText.trim();
+      const persistedResumeProfile = settings.resumeProfile.rawText.trim();
+      paperDraftText =
+        persistedPaperDraft && persistedPaperDraft !== persistedResumeProfile
+          ? settings.paperDraftText
+          : "";
     } catch (error) {
       settingsStatus =
         error instanceof Error ? error.message : "Unable To Load Local Parser Settings.";
@@ -531,18 +536,13 @@
   async function saveResumeProfile() {
     try {
       const nextResumeProfile = createResumeProfile(resumeTextDraft);
-      const nextPaperDraftText = paperDraftText.trim()
-        ? paperDraftText
-        : nextResumeProfile.rawText;
       await saveLocalSettings(
         buildLocalSettings({
           resumeProfile: nextResumeProfile,
-          paperDraftText: nextPaperDraftText,
         })
       );
       resumeProfile = nextResumeProfile;
       resumeTextDraft = nextResumeProfile.rawText;
-      paperDraftText = nextPaperDraftText;
       resumeStatus = nextResumeProfile.rawText
         ? `Resume Profile Saved With ${nextResumeProfile.skills.length} Tracked Skill${nextResumeProfile.skills.length === 1 ? "" : "s"}.`
         : "Resume Profile Cleared.";

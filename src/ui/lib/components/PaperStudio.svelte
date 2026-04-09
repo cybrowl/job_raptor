@@ -101,7 +101,7 @@
     }
 
     draftText = savedResumeText;
-    exportStatus = "Loaded the saved resume profile into Paper.";
+    exportStatus = "Loaded your saved resume profile into Paper.";
   }
 
   function saveDraft() {
@@ -140,9 +140,9 @@
       <div class="meta-row" style="justify-content: space-between; align-items: flex-start;">
         <div class="panel-grid" style="gap: 0.25rem;">
           <p class="eyebrow">Paper</p>
-          <h2 class="title">One-Page Resume Studio</h2>
+          <h2 class="title">One-Page Paper Studio</h2>
           <p class="body">
-            Paste a modified resume draft, fit it to one page, and export a recruiter-ready PDF that follows the attached resume’s structure.
+            Start blank, paste a cover letter or markdown resume, fit it to one page, and export a recruiter-ready PDF.
           </p>
         </div>
         <div class="panel-grid paper-fit-status">
@@ -164,7 +164,7 @@
           disabled={!savedResumeText.trim()}
           on:click={loadSavedResume}
         >
-          Load Saved Resume
+          Load Resume Profile
         </button>
         <button type="button" class="ghost-button ghost-button-small" on:click={saveDraft}>
           Save Draft
@@ -180,13 +180,13 @@
       </div>
 
       <div class="field">
-        <p class="field-label">Resume Draft</p>
+        <p class="field-label">Paper Draft</p>
         <textarea
           bind:value={draftText}
           rows="24"
           class="paper-editor-textarea"
           spellcheck="false"
-          placeholder="Paste your modified resume text here. Keep the section headings and bullets close to your PDF if you want the cleanest one-page fit."
+          placeholder="Start with a blank page, then paste a cover letter or markdown resume here. Resume markdown works best when it keeps clear headings, entries, and bullets."
         ></textarea>
       </div>
 
@@ -231,7 +231,7 @@
           <div class="paper-preview-empty">
             <p class="paper-preview-empty-title">Preview will appear here.</p>
             <p class="micro">
-              Paste a resume draft on the left and Paper will compress it into a one-page export.
+              Paste a cover letter or markdown resume on the left and Paper will fit it into a one-page export.
             </p>
           </div>
         {/if}

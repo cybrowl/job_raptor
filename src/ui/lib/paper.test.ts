@@ -54,6 +54,22 @@ Senior Software Engineer with 9+ years architecting scalable frontend and full-s
 Advanced Software Engineering Immersive Program - Hack Reactor, 2015
 `;
 
+const COVER_LETTER = `
+Jefri Vanegas
+Los Angeles, CA | (213) 822-4331 | vjefri@gmail.com
+March 22, 2026
+
+Hiring Team
+Abnormal Security
+
+Dear Hiring Team,
+
+I’m excited to apply for the Staff Software Engineer role.
+
+Best regards,
+Jefri Vanegas
+`;
+
 describe("parsePaperResume", () => {
   it("extracts the resume header", () => {
     const parsed = parsePaperResume(SAMPLE_RESUME);
@@ -131,5 +147,26 @@ describe("parsePaperResume", () => {
     expect(experience.entries[0]?.title).toContain("CodeGov");
     expect(experience.entries[0]?.dateRange).toBe("2024 - 2026");
     expect(experience.entries[0]?.bullets[0]).toContain("performance code reviews");
+  });
+
+  it("parses plain-text cover letters without duplicating the body into the header", () => {
+    const parsed = parsePaperResume(COVER_LETTER);
+
+    expect(parsed.header.name).toBe("Jefri Vanegas");
+    expect(parsed.header.contactLines).toEqual([
+      "Los Angeles, CA | (213) 822-4331 | vjefri@gmail.com",
+      "March 22, 2026",
+    ]);
+
+    expect(parsed.sections).toHaveLength(1);
+    expect(parsed.sections[0]?.kind).toBe("letter");
+
+    if (!parsed.sections[0] || parsed.sections[0].kind !== "letter") {
+      throw new Error("Expected a letter section.");
+    }
+
+    expect(parsed.sections[0].title).toBe("");
+    expect(parsed.sections[0].paragraphs[0]).toBe("Hiring Team Abnormal Security");
+    expect(parsed.sections[0].paragraphs.join(" ")).not.toContain("March 22, 2026 Dear");
   });
 });
