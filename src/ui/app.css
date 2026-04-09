@@ -478,6 +478,105 @@ textarea::placeholder {
   gap: 14px;
 }
 
+.paper-studio {
+  display: grid;
+  gap: 24px;
+  grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
+  align-items: start;
+}
+
+.paper-editor-panel,
+.paper-preview-panel {
+  align-content: start;
+}
+
+.paper-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.paper-fit-status {
+  justify-items: end;
+}
+
+.paper-fit-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 32px;
+  border: 1px solid var(--color-ghost-border);
+  background: var(--color-ghost-bg);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 1.17px;
+  text-transform: uppercase;
+  color: var(--color-text);
+}
+
+.paper-fit-pill-warning {
+  border-color: rgba(240, 186, 98, 0.45);
+  color: rgba(255, 220, 170, 0.94);
+}
+
+.paper-editor-textarea {
+  width: 100%;
+  min-height: 620px;
+  border: 1px solid var(--color-ghost-border);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 18px 20px;
+  color: var(--color-text);
+  font-family: "SFMono-Regular", "Menlo", "Consolas", monospace;
+  font-size: 14px;
+  line-height: 1.5;
+  letter-spacing: 0;
+  text-transform: none;
+  resize: vertical;
+}
+
+.paper-preview-shell {
+  min-height: 100%;
+  padding: 18px;
+  border: 1px solid var(--color-line);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.03);
+  overflow: auto;
+}
+
+.paper-preview-page {
+  position: relative;
+  margin: 0 auto;
+  background: #ffffff;
+  border-radius: 8px;
+}
+
+.paper-preview-line {
+  position: absolute;
+  white-space: pre-wrap;
+  text-transform: none;
+  letter-spacing: 0;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.paper-preview-empty {
+  min-height: 520px;
+  display: grid;
+  place-items: center;
+  gap: 12px;
+  text-align: center;
+}
+
+.paper-preview-empty-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text);
+}
+
 .resume-uploader {
   display: grid;
   gap: 16px;
@@ -680,10 +779,20 @@ textarea::placeholder {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .paper-studio {
+    grid-template-columns: 1fr;
+  }
+
+  .paper-action-row,
+  .paper-fit-status,
   .resume-uploader-copy,
   .uploaded-file-row {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .paper-editor-textarea {
+    min-height: 460px;
   }
 }
 

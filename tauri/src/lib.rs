@@ -852,6 +852,43 @@ async fn export_backup_file(
 }
 
 #[tauri::command]
+async fn export_paper_pdf(
+    app: AppHandle,
+    bytes: Vec<u8>,
+    suggested_filename: Option<String>,
+) -> Result<Option<String>, String> {
+    let filename = suggested_filename
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "resume-paper.pdf".to_string());
+
+    let selected = tauri::async_runtime::spawn_blocking(move || {
+        app.dialog()
+            .file()
+            .set_title("Export Resume Paper")
+            .set_file_name(filename)
+            .add_filter("PDF", &["pdf"])
+            .blocking_save_file()
+    })
+    .await
+    .map_err(|error| error.to_string())?;
+
+    let Some(file_path) = selected else {
+        return Ok(None);
+    };
+
+    let path = resolve_dialog_path(file_path)?;
+    let saved_path = path.display().to_string();
+
+    tauri::async_runtime::spawn_blocking(move || fs::write(&path, bytes))
+        .await
+        .map_err(|error| error.to_string())?
+        .map_err(|error| error.to_string())?;
+
+    Ok(Some(saved_path))
+}
+
+#[tauri::command]
 async fn import_backup_file(app: AppHandle) -> Result<Option<ImportedBackupFile>, String> {
     let selected = tauri::async_runtime::spawn_blocking(move || {
         app.dialog()
@@ -934,6 +971,7 @@ ALTER TABLE applications ADD COLUMN job_description TEXT NOT NULL DEFAULT '';",
         .invoke_handler(tauri::generate_handler![
             parse_job_url,
             export_backup_file,
+            export_paper_pdf,
             import_backup_file
         ])
         .run(tauri::generate_context!())

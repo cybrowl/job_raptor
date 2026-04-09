@@ -8,6 +8,7 @@ const BROWSER_STATE_KEY = "job-raptor.browser-state.v1";
 const XAI_KEY_SETTING = "xai_api_key";
 const XAI_MODEL_SETTING = "xai_model";
 const RESUME_PROFILE_SETTING = "resume_profile";
+const PAPER_DRAFT_SETTING = "paper_draft";
 const BACKUP_KIND = "job-raptor-backup";
 const LEGACY_BACKUP_KIND = "jobflow-backup";
 
@@ -15,6 +16,7 @@ export interface LocalSettings {
   xAiApiKey: string;
   xAiModel: string;
   resumeProfile: ResumeProfile;
+  paperDraftText: string;
 }
 
 export interface JobRaptorBackup {
@@ -90,6 +92,7 @@ function createEmptyBrowserState(): BrowserState {
       xAiApiKey: "",
       xAiModel: "grok-4-fast-non-reasoning",
       resumeProfile: createEmptyResumeProfile(),
+      paperDraftText: "",
     },
   };
 }
@@ -124,6 +127,10 @@ function readBrowserState() {
             ? parsed.settings.xAiModel.trim()
             : "grok-4-fast-non-reasoning",
         resumeProfile: normalizeResumeProfile(parsed.settings?.resumeProfile),
+        paperDraftText:
+          typeof parsed.settings?.paperDraftText === "string"
+            ? parsed.settings.paperDraftText
+            : "",
       },
     };
   } catch (error) {
@@ -149,6 +156,8 @@ function normalizeSettings(raw: unknown): LocalSettings {
         ? candidate.xAiModel.trim()
         : "grok-4-fast-non-reasoning",
     resumeProfile: normalizeResumeProfile(candidate.resumeProfile),
+    paperDraftText:
+      typeof candidate.paperDraftText === "string" ? candidate.paperDraftText : "",
   };
 }
 
@@ -588,8 +597,8 @@ export async function loadLocalSettings(): Promise<LocalSettings> {
   if (getStorageDriver() === "sqlite") {
     const rows = await runSqliteTask((db) =>
       db.select<Array<{ key: string; value: string }>>(
-        "SELECT key, value FROM settings WHERE key IN (?, ?, ?)",
-        [XAI_KEY_SETTING, XAI_MODEL_SETTING, RESUME_PROFILE_SETTING]
+        "SELECT key, value FROM settings WHERE key IN (?, ?, ?, ?)",
+        [XAI_KEY_SETTING, XAI_MODEL_SETTING, RESUME_PROFILE_SETTING, PAPER_DRAFT_SETTING]
       )
     );
     const entries = new Map(rows.map((row) => [row.key, row.value]));
@@ -608,6 +617,7 @@ export async function loadLocalSettings(): Promise<LocalSettings> {
       xAiApiKey: entries.get(XAI_KEY_SETTING) ?? "",
       xAiModel: entries.get(XAI_MODEL_SETTING) ?? "grok-4-fast-non-reasoning",
       resumeProfile,
+      paperDraftText: entries.get(PAPER_DRAFT_SETTING) ?? "",
     };
   }
 
@@ -618,6 +628,7 @@ export async function saveLocalSettings(settings: LocalSettings) {
   const normalizedKey = settings.xAiApiKey.trim();
   const normalizedModel = settings.xAiModel.trim() || "grok-4-fast-non-reasoning";
   const normalizedResumeProfile = normalizeResumeProfile(settings.resumeProfile);
+  const normalizedPaperDraft = settings.paperDraftText;
 
   if (getStorageDriver() === "sqlite") {
     await runSqliteTask(async (db) => {
@@ -639,6 +650,17 @@ export async function saveLocalSettings(settings: LocalSettings) {
         await db.execute("DELETE FROM settings WHERE key = ?", [RESUME_PROFILE_SETTING]);
       }
 
+      if (normalizedPaperDraft.trim()) {
+        await db.execute(
+          `INSERT INTO settings (key, value)
+          VALUES (?, ?)
+          ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+          [PAPER_DRAFT_SETTING, normalizedPaperDraft]
+        );
+      } else {
+        await db.execute("DELETE FROM settings WHERE key = ?", [PAPER_DRAFT_SETTING]);
+      }
+
       if (!normalizedKey) {
         await db.execute("DELETE FROM settings WHERE key = ?", [XAI_KEY_SETTING]);
         return;
@@ -658,6 +680,7 @@ export async function saveLocalSettings(settings: LocalSettings) {
   state.settings.xAiApiKey = normalizedKey;
   state.settings.xAiModel = normalizedModel;
   state.settings.resumeProfile = normalizedResumeProfile;
+  state.settings.paperDraftText = normalizedPaperDraft;
   writeBrowserState(state);
 }
 
@@ -747,6 +770,15 @@ async function replaceAllLocalData(backup: JobRaptorBackup) {
             VALUES (?, ?)
             ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
             [RESUME_PROFILE_SETTING, JSON.stringify(normalizeResumeProfile(backup.settings.resumeProfile))]
+          );
+        }
+
+        if (backup.settings.paperDraftText.trim()) {
+          await db.execute(
+            `INSERT INTO settings (key, value)
+            VALUES (?, ?)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+            [PAPER_DRAFT_SETTING, backup.settings.paperDraftText]
           );
         }
 

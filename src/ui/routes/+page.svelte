@@ -5,9 +5,11 @@
   import AnalyticsPanel from "$lib/components/AnalyticsPanel.svelte";
   import ApplicationsTable from "$lib/components/ApplicationsTable.svelte";
   import MetricCard from "$lib/components/MetricCard.svelte";
+  import PaperStudio from "$lib/components/PaperStudio.svelte";
   import {
     exportBackupToFile,
     importBackupFromFile,
+    type LocalSettings,
     loadLocalSettings,
     saveLocalSettings,
   } from "$lib/local/persistence";
@@ -23,7 +25,7 @@
     isActiveStatus,
   } from "$lib/utils";
 
-  type WorkspaceView = "table" | "analytics" | "settings";
+  type WorkspaceView = "table" | "paper" | "analytics" | "settings";
   type TrendDirection = "up" | "down" | "flat";
 
   interface ParseToast {
@@ -51,6 +53,8 @@
   let resumeProfile: ResumeProfile = createEmptyResumeProfile();
   let resumeTextDraft = "";
   let resumeStatus = "";
+  let paperDraftText = "";
+  let paperStatus = "";
   let resumeDraftFile: UploadedResumeDraftFile | null = null;
   let resumeDropActive = false;
   let resumeDragDepth = 0;
@@ -126,6 +130,18 @@
         : "Grok Ready"
       : "Saved Grok Key"
     : "Fast Local";
+
+  function buildLocalSettings(
+    overrides: Partial<LocalSettings> = {}
+  ): LocalSettings {
+    return {
+      xAiApiKey: xAiApiKeyDraft,
+      xAiModel: xAiModelDraft,
+      resumeProfile,
+      paperDraftText,
+      ...overrides,
+    };
+  }
 
   function handleEdit(event: CustomEvent<JobApplication>) {
     editingApplication = event.detail;
@@ -366,6 +382,7 @@
       xAiModelDraft = settings.xAiModel;
       resumeProfile = settings.resumeProfile;
       resumeTextDraft = settings.resumeProfile.rawText;
+      paperDraftText = settings.paperDraftText || settings.resumeProfile.rawText;
     } catch (error) {
       settingsStatus =
         error instanceof Error ? error.message : "Unable To Load Local Parser Settings.";
@@ -376,11 +393,7 @@
     try {
       xAiApiKeyDraft = xAiApiKeyDraft.trim();
       xAiModelDraft = xAiModelDraft.trim() || "grok-4-fast-non-reasoning";
-      await saveLocalSettings({
-        xAiApiKey: xAiApiKeyDraft,
-        xAiModel: xAiModelDraft,
-        resumeProfile,
-      });
+      await saveLocalSettings(buildLocalSettings());
       settingsStatus = xAiApiKeyDraft.trim()
         ? "Grok Key Saved On This Device."
         : "Grok Key Cleared.";
@@ -518,19 +531,39 @@
   async function saveResumeProfile() {
     try {
       const nextResumeProfile = createResumeProfile(resumeTextDraft);
-      await saveLocalSettings({
-        xAiApiKey: xAiApiKeyDraft,
-        xAiModel: xAiModelDraft,
-        resumeProfile: nextResumeProfile,
-      });
+      const nextPaperDraftText = paperDraftText.trim()
+        ? paperDraftText
+        : nextResumeProfile.rawText;
+      await saveLocalSettings(
+        buildLocalSettings({
+          resumeProfile: nextResumeProfile,
+          paperDraftText: nextPaperDraftText,
+        })
+      );
       resumeProfile = nextResumeProfile;
       resumeTextDraft = nextResumeProfile.rawText;
+      paperDraftText = nextPaperDraftText;
       resumeStatus = nextResumeProfile.rawText
         ? `Resume Profile Saved With ${nextResumeProfile.skills.length} Tracked Skill${nextResumeProfile.skills.length === 1 ? "" : "s"}.`
         : "Resume Profile Cleared.";
     } catch (error) {
       resumeStatus =
         error instanceof Error ? error.message : "Unable To Save The Resume Profile.";
+    }
+  }
+
+  async function handleSavePaperDraft(event: CustomEvent<{ rawText: string }>) {
+    try {
+      paperDraftText = event.detail.rawText;
+      await saveLocalSettings(
+        buildLocalSettings({
+          paperDraftText: event.detail.rawText,
+        })
+      );
+      paperStatus = "Paper draft saved on this device.";
+    } catch (error) {
+      paperStatus =
+        error instanceof Error ? error.message : "Unable to save the paper draft.";
     }
   }
 
@@ -789,6 +822,14 @@
               </button>
               <button
                 type="button"
+                class:segmented-button-active={activeView === "paper"}
+                class="segmented-button"
+                on:click={() => (activeView = "paper")}
+              >
+                Paper
+              </button>
+              <button
+                type="button"
                 class:segmented-button-active={activeView === "analytics"}
                 class="segmented-button"
                 on:click={() => (activeView = "analytics")}
@@ -815,6 +856,13 @@
             on:remove={handleRemove}
             on:resyncall={handleResyncAll}
             on:statuschange={handleStatusChange}
+          />
+        {:else if activeView === "paper"}
+          <PaperStudio
+            bind:draftText={paperDraftText}
+            savedResumeText={resumeProfile.rawText}
+            statusMessage={paperStatus}
+            on:savedraft={handleSavePaperDraft}
           />
         {:else if activeView === "analytics"}
           <AnalyticsPanel metrics={metrics} />
