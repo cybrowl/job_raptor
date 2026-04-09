@@ -81,7 +81,7 @@ textarea::placeholder {
 
 .panel {
   position: relative;
-  padding: clamp(24px, 4vw, 56px);
+  @apply px-5 py-6 sm:px-8 sm:py-8 lg:px-10 xl:px-14;
   background: transparent;
   border: 0;
   border-radius: 0;
@@ -143,20 +143,15 @@ textarea::placeholder {
 }
 
 .hero-panel {
-  display: grid;
-  align-content: start;
-  padding-bottom: clamp(24px, 3vw, 40px);
+  @apply grid content-start pb-6 sm:pb-8 lg:pb-10;
 }
 
 .panel-grid {
-  display: grid;
-  gap: clamp(12px, 2vw, 20px);
+  @apply grid gap-3 sm:gap-5;
 }
 
 .hero-grid {
-  display: grid;
-  gap: clamp(24px, 4vw, 48px);
-  grid-template-columns: minmax(0, 1.15fr) minmax(340px, 0.85fr);
+  @apply grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)] 2xl:gap-12;
 }
 
 .hero-primary,
@@ -170,17 +165,11 @@ textarea::placeholder {
 
 .dashboard-grid {
   position: relative;
-  display: grid;
-  gap: clamp(24px, 4vw, 48px);
-  grid-template-columns: 1fr;
-  padding: clamp(24px, 4vw, 56px);
-  align-items: start;
+  @apply grid grid-cols-1 items-start gap-6 px-5 py-6 sm:px-8 sm:py-8 lg:px-10 xl:gap-12 xl:px-14;
 }
 
 .content-stack {
-  display: grid;
-  gap: clamp(20px, 3vw, 30px);
-  align-content: start;
+  @apply grid content-start gap-5 sm:gap-6 lg:gap-8;
 }
 
 .eyebrow {
@@ -259,6 +248,7 @@ textarea::placeholder {
 }
 
 .ghost-button {
+  @apply inline-flex items-center justify-center;
   min-height: 46px;
   width: fit-content;
   padding: 0 18px;
@@ -291,16 +281,11 @@ textarea::placeholder {
 }
 
 .action-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
+  @apply flex flex-wrap gap-3;
 }
 
 .meta-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px 20px;
-  align-items: center;
+  @apply flex flex-wrap items-center gap-x-5 gap-y-3;
 }
 
 .meta-pill {
@@ -318,9 +303,7 @@ textarea::placeholder {
 }
 
 .metric-grid {
-  display: grid;
-  gap: 24px;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  @apply grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4;
 }
 
 .metric-grid-hero {
@@ -396,17 +379,19 @@ textarea::placeholder {
 }
 
 .quick-parse-bar {
-  display: grid;
-  gap: 12px;
-  grid-template-columns: minmax(0, 1fr) auto;
+  @apply grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_auto];
 }
 
 .quick-parse-bar-prominent {
   align-items: stretch;
-  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.quick-parse-bar .ghost-button {
+  @apply w-full sm:w-fit;
 }
 
 .quick-parse-bar-prominent .ghost-button {
+  @apply w-full sm:w-fit;
   min-height: 72px;
 }
 
@@ -474,15 +459,11 @@ textarea::placeholder {
 }
 
 .settings-cluster {
-  display: grid;
-  gap: 14px;
+  @apply grid gap-3.5;
 }
 
 .paper-studio {
-  display: grid;
-  gap: 24px;
-  grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
-  align-items: start;
+  @apply grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1.05fr)_minmax(20rem,0.95fr)];
 }
 
 .paper-editor-panel,
@@ -491,13 +472,15 @@ textarea::placeholder {
 }
 
 .paper-action-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
+  @apply flex flex-wrap gap-3;
+}
+
+.paper-action-row .ghost-button {
+  @apply w-full sm:w-fit;
 }
 
 .paper-fit-status {
-  justify-items: end;
+  @apply justify-items-start sm:justify-items-end;
 }
 
 .paper-fit-pill {
@@ -522,7 +505,7 @@ textarea::placeholder {
 
 .paper-editor-textarea {
   width: 100%;
-  min-height: 620px;
+  min-height: clamp(360px, 65vh, 620px);
   border: 1px solid var(--color-ghost-border);
   border-radius: 20px;
   background: rgba(255, 255, 255, 0.03);
@@ -538,7 +521,7 @@ textarea::placeholder {
 
 .paper-preview-shell {
   min-height: 100%;
-  padding: 18px;
+  @apply p-3 sm:p-4 lg:p-[18px];
   border: 1px solid var(--color-line);
   border-radius: 24px;
   background: rgba(255, 255, 255, 0.03);
@@ -597,10 +580,7 @@ textarea::placeholder {
 }
 
 .resume-uploader-copy {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
+  @apply flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center;
 }
 
 .resume-uploader-title {
@@ -613,10 +593,7 @@ textarea::placeholder {
 }
 
 .uploaded-file-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
+  @apply flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center;
   padding: 14px 18px;
   border: 1px solid var(--color-ghost-border);
   border-radius: 32px;
@@ -662,22 +639,18 @@ textarea::placeholder {
 }
 
 .workspace-switcher-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
+  @apply flex flex-col items-start gap-5 lg:flex-row lg:items-center lg:justify-between;
 }
 
 .segmented-control {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 12px;
+  @apply flex w-full flex-wrap gap-3 lg:w-auto;
   padding: 0;
   border: 0;
   background: transparent;
 }
 
 .segmented-button {
+  @apply inline-flex grow items-center justify-center lg:grow-0;
   min-height: 42px;
   padding: 0 18px;
   border: 1px solid transparent;
@@ -701,19 +674,12 @@ textarea::placeholder {
 }
 
 .modal-shell {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
+  @apply fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-5;
   background: rgba(0, 0, 0, 0.88);
 }
 
 .modal-panel {
-  width: min(1180px, 100%);
-  max-height: calc(100vh - 40px);
+  @apply w-full max-w-[1180px] max-h-[calc(100vh-2rem)] overflow-auto p-5 sm:max-h-[calc(100vh-40px)] sm:p-8 xl:p-12;
   overflow: auto;
   border: 0;
   border-radius: 0;
@@ -722,7 +688,6 @@ textarea::placeholder {
     radial-gradient(120% 72% at 84% 0%, rgba(240, 240, 250, 0.16) 0%, transparent 36%),
     radial-gradient(100% 44% at 50% 115%, rgba(240, 240, 250, 0.16) 0%, transparent 26%),
     #000;
-  padding: clamp(24px, 4vw, 48px);
 }
 
 .toast-stack {
@@ -767,60 +732,12 @@ textarea::placeholder {
   }
 }
 
-@media (max-width: 1100px) {
-  .hero-grid,
-  .dashboard-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 780px) {
-  .metric-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .paper-studio {
-    grid-template-columns: 1fr;
-  }
-
-  .paper-action-row,
-  .paper-fit-status,
-  .resume-uploader-copy,
-  .uploaded-file-row {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .paper-editor-textarea {
-    min-height: 460px;
-  }
-}
-
 @media (max-width: 640px) {
-  .panel,
-  .dashboard-grid,
-  .modal-panel {
-    padding: 20px;
-  }
-
   .hero-heading {
     font-size: clamp(2.4rem, 11vw, 3.2rem);
   }
 
   .title {
     font-size: clamp(1.3rem, 7vw, 2rem);
-  }
-
-  .metric-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .quick-parse-bar {
-    grid-template-columns: 1fr;
-  }
-
-  .workspace-switcher-row {
-    align-items: start;
-    flex-direction: column;
   }
 }

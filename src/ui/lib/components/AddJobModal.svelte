@@ -169,7 +169,7 @@
   >
     <div class="modal-panel">
       <div class="panel-grid">
-        <div class="meta-row" style="justify-content: space-between;">
+        <div class="meta-row items-start justify-between gap-4 sm:items-center">
           <div class="panel-grid" style="gap: 0.25rem;">
             <p class="eyebrow">{application ? "Edit Application" : "Add Application"}</p>
             <h2 class="title">
@@ -181,7 +181,7 @@
           </button>
         </div>
 
-        <div class="panel-grid" style="grid-template-columns: minmax(0, 1fr) auto;">
+        <div class="panel-grid md:grid-cols-[minmax(0,1fr)_auto]">
           <div class="field">
             <p class="field-label">Job Url</p>
             <input
@@ -190,7 +190,7 @@
               placeholder="Paste A LinkedIn, Greenhouse, Lever, Or Careers Url"
             />
           </div>
-          <div class="action-row" style="align-items: end;">
+          <div class="action-row items-end">
             <button
               type="button"
               class="ghost-button"
@@ -298,7 +298,7 @@
           </div>
         </div>
 
-        <div class="action-row" style="justify-content: flex-end;">
+        <div class="action-row justify-stretch sm:justify-end">
           <button type="button" class="ghost-button" on:click={() => (open = false)}>
             Cancel
           </button>
@@ -314,17 +314,17 @@
 <style lang="postcss">
   .form-grid {
     display: grid;
+    grid-template-columns: 1fr;
     gap: 1rem;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .form-span {
     grid-column: 1 / -1;
   }
 
-  @media (max-width: 720px) {
+  @media (min-width: 768px) {
     .form-grid {
-      grid-template-columns: 1fr;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
 </style>

@@ -144,12 +144,12 @@
 
 <section class="panel">
   <div class="panel-grid">
-    <div class="meta-row" style="justify-content: space-between;">
+    <div class="meta-row items-start justify-between gap-4 sm:items-center">
       <div class="panel-grid" style="gap: 0.25rem;">
         <p class="eyebrow">Applications</p>
         <h2 class="title">Pipeline Table</h2>
       </div>
-      <div class="action-row">
+      <div class="action-row w-full sm:w-auto sm:justify-end">
         <button
           type="button"
           class="ghost-button ghost-button-small"
@@ -325,10 +325,11 @@
 
 <style lang="postcss">
   .table-wrap {
-    overflow-x: auto;
+    @apply max-w-full overflow-x-auto;
   }
 
   .applications-table {
+    min-width: 72rem;
     width: 100%;
     border-collapse: collapse;
   }
@@ -464,5 +465,11 @@
     border-color: rgba(240, 240, 250, 0.16);
     background: transparent;
     color: var(--color-text-soft);
+  }
+
+  @media (max-width: 640px) {
+    .applications-table {
+      min-width: 58rem;
+    }
   }
 </style>

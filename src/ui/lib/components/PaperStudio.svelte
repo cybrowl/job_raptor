@@ -137,7 +137,7 @@
 <section class="panel">
   <div class="paper-studio">
     <div class="panel-grid paper-editor-panel">
-      <div class="meta-row" style="justify-content: space-between; align-items: flex-start;">
+      <div class="meta-row items-start justify-between gap-4">
         <div class="panel-grid" style="gap: 0.25rem;">
           <p class="eyebrow">Paper</p>
           <h2 class="title">One-Page Paper Studio</h2>
@@ -200,7 +200,7 @@
     </div>
 
     <div class="panel-grid paper-preview-panel">
-      <div class="meta-row" style="justify-content: space-between; align-items: center;">
+      <div class="meta-row items-start justify-between gap-4 sm:items-center">
         <div class="panel-grid" style="gap: 0.25rem;">
           <p class="field-label">Paper Preview</p>
           <p class="micro">

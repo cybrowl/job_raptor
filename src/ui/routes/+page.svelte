@@ -694,7 +694,7 @@
 
           <form class="panel-grid parser-spotlight" on:submit|preventDefault={handleQuickParse}>
             <div class="field">
-              <div class="meta-row">
+              <div class="meta-row items-start justify-between gap-3 sm:items-center">
                 <p class="field-label">Grok Ai</p>
                 <span class="meta-pill">
                   {quickParseProvider}
@@ -917,7 +917,7 @@
                   </p>
                 </div>
 
-                <div class="meta-row">
+                <div class="meta-row items-start gap-3 sm:items-center">
                   <span class="meta-pill">{resumeProfile.skills.length} Skills Tracked</span>
                   <span class="meta-pill">
                     {resumeProfile.updatedAt ? `Updated ${new Date(resumeProfile.updatedAt).toLocaleDateString("en-US")}` : "No Resume Saved"}

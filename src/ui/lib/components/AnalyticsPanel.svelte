@@ -8,7 +8,7 @@
 
 <section class="panel">
   <div class="panel-grid">
-    <div class="meta-row" style="justify-content: space-between;">
+    <div class="meta-row items-start justify-between gap-4 sm:items-center">
       <div class="panel-grid" style="gap: 0.25rem;">
         <p class="eyebrow">Analytics</p>
         <h2 class="title">Snapshot And Plain-English Insight</h2>
@@ -101,7 +101,7 @@
 <style lang="postcss">
   .analytics-daily-head {
     display: grid;
-    gap: 0.35rem;
+    gap: 0.25rem;
   }
 
   .analytics-daily-grid {
@@ -111,7 +111,7 @@
   .analytics-grid {
     display: grid;
     gap: 1rem;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: 1fr;
   }
 
   .analytics-list {
@@ -124,6 +124,7 @@
 
   .analytics-line {
     display: flex;
+    align-items: flex-start;
     justify-content: space-between;
     gap: 1rem;
     font-size: 12px;
@@ -133,9 +134,9 @@
     color: var(--color-text-soft);
   }
 
-  @media (max-width: 760px) {
+  @media (min-width: 1280px) {
     .analytics-grid {
-      grid-template-columns: 1fr;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
 </style>
